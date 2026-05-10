@@ -9,7 +9,7 @@ use crate::{
     fs::get_image_files,
     wallpaper_changers::{
         GSllapperPauseMode, GSllapperScaleMode, HyprpaperFitModes, MpvPaperPauseModes,
-        MpvPaperSlideshowSettings, AWWWResizeMode, AWWWScallingFilter, AWWWTransitionBezier,
+        MpvPaperSlideshowSettings, AWWWResizeMode, AWWWTransitionBezier,
         AWWWTransitionPosition, AWWWTransitionType, AWWWTransitionWave, SwaybgModes, U32Enum,
         WallpaperChanger, WallpaperChangers,
     },
@@ -122,7 +122,7 @@ pub fn generate_changer_bar(
         WallpaperChangers::MpvPaper(_, _, _) => {
             generate_mpvpaper_changer_bar(changer_specific_options_box, settings);
         }
-        WallpaperChangers::Awww(_, _, _, _, _, _, _, _, _, _, _, _) => {
+        WallpaperChangers::Awww(_, _, _, _, _, _, _, _, _, _, _) => {
             generate_awww_changer_bar(changer_specific_options_box, settings);
         }
         WallpaperChangers::GSlapper(_, _, _, _) => {
@@ -176,7 +176,6 @@ pub fn get_selected_changer(
         "awww" => {
             let resize = AWWWResizeMode::from_u32(settings.uint("awww-resize"));
             let fill_color = RGB::from_str(settings.string("awww-fill-color").as_str()).unwrap();
-            let scaling_filter = AWWWScallingFilter::from_u32(settings.uint("awww-scaling-filter"));
             let transition_type =
                 AWWWTransitionType::from_u32(settings.uint("awww-transition-type"));
             let transition_step = settings.double("awww-transition-step") as u8;
@@ -200,7 +199,6 @@ pub fn get_selected_changer(
             WallpaperChangers::Awww(
                 resize,
                 fill_color,
-                scaling_filter,
                 transition_type,
                 transition_step,
                 transition_duration,
@@ -250,7 +248,7 @@ pub fn sort_images(
         sort_dropdown.clone(),
         invert_sort_switch.clone(),
     ));
-    if image_list_store.into_iter().len() != 0 {
+    if image_list_store.n_items() > 0 {
         image_grid.scroll_to(0, ListScrollFlags::FOCUS, None);
     }
 }

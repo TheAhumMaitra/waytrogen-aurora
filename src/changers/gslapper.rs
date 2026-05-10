@@ -50,7 +50,7 @@ pub fn change_gslapper_wallpaper(
     image: PathBuf,
     monitor: &str,
 ) {
-    if let WallpaperChangers::GSlapper(scale_mode, pause_mode, loop_video, additional_options) =
+    if let WallpaperChangers::GSlapper(_, pause_mode, loop_video, additional_options) =
         gslapper_changer
     {
         debug!("gSlapper: Setting wallpaper {}", image.display());
@@ -60,9 +60,6 @@ pub fn change_gslapper_wallpaper(
 
         // Build gslapper options
         let mut gst_options = Vec::new();
-
-        // Add scale mode
-        gst_options.push(scale_mode.to_string());
 
         // Add loop if enabled
         if *loop_video {
@@ -119,25 +116,6 @@ pub fn change_gslapper_wallpaper(
 }
 
 pub fn generate_gslapper_changer_bar(changer_specific_options_box: &Box, settings: Settings) {
-    // Scale mode dropdown
-    let scale_mode_dropdown = DropDown::from_strings(&[
-        &gettext("fill"),
-        &gettext("stretch"),
-        &gettext("original"),
-        &gettext("panscan"),
-    ]);
-    scale_mode_dropdown.set_margin_top(12);
-    scale_mode_dropdown.set_margin_start(12);
-    scale_mode_dropdown.set_margin_bottom(12);
-    scale_mode_dropdown.set_margin_end(12);
-    scale_mode_dropdown.set_halign(Align::Start);
-    scale_mode_dropdown.set_valign(Align::Center);
-    scale_mode_dropdown.set_tooltip_text(Some(&gettext("Scale mode for wallpaper")));
-    settings
-        .bind("gslapper-scale-mode", &scale_mode_dropdown, "selected")
-        .build();
-    changer_specific_options_box.append(&scale_mode_dropdown);
-
     // Pause mode dropdown
     let pause_mode_dropdown = DropDown::from_strings(&[
         &gettext("none"),

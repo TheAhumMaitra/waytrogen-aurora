@@ -98,7 +98,7 @@ impl Default for GtkPictureFile {
 pub struct CacheImageFile {
     pub cached_image_path: PathBuf,
     pub name: String,
-    pub date: u64,
+    pub date: i64,
     pub path: String,
 }
 
@@ -108,11 +108,11 @@ impl CacheImageFile {
         Self::create_gtk_image(path, &image)
     }
 
-    fn get_metadata(path: &Path) -> anyhow::Result<(String, String, u64)> {
+    fn get_metadata(path: &Path) -> anyhow::Result<(String, String, i64)> {
         let path = path.to_path_buf();
         let name = path.file_name().unwrap().to_str().unwrap().to_owned();
         let date = std::fs::File::open(path.clone())?.metadata()?.modified()?;
-        let date = date.duration_since(UNIX_EPOCH)?.as_secs();
+        let date = date.duration_since(UNIX_EPOCH)?.as_secs() as i64;
         Ok((path.to_str().unwrap().to_string(), name, date))
     }
 

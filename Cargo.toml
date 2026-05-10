@@ -2,13 +2,13 @@
 name = "waytrogen"
 version = "0.9.3"
 edition = "2021"
-description = "A GTK graphical user interface for changing your wallpapers on Wayland based compositors."
-license = "Unlicense"
+description = "A GTK graphical user interface for changing wallpapers on Aurora"
+license = "GPL-3.0-or-later"
 readme = "README.md"
-authors = ["nikolaizombie1 <fabio.matos999@gmail.com>"]
+authors = ["nikolaizombie1 <fabio.matos999@gmail.com>", "Ahum Maitra <theahummaitra@gmail.com>"]
 homepage = "https://github.com/nikolaizombie1/waytrogen"
 repository = "https://github.com/nikolaizombie1/waytrogen"
-keywords = ["gui", "themeing", "wallpaper", "linux", "wayland"]
+keywords = ["gui", "themeing", "wallpaper switcher for Aurora", "linux", "wayland"]
 categories = ["gui"]
 exclude = ["README-Assets/*.webp"]
 

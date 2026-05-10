@@ -2,7 +2,7 @@ use crate::{
     common::RGB,
     ui_common::DEFAULT_MARGIN,
     wallpaper_changers::{
-        AWWWScallingFilter, AWWWTransitionBezier, AWWWTransitionPosition, U32Enum,
+        AWWWTransitionBezier, AWWWTransitionPosition,
         WallpaperChangers,
     },
 };
@@ -20,9 +20,8 @@ use std::{path::PathBuf, process::Command};
 
 pub fn change_awww_wallpaper(awww_changer: WallpaperChangers, image: PathBuf, monitor: String) {
     if let WallpaperChangers::Awww(
-        resize_modes,
+        _resize_modes,
         fill_color,
-        scalling_filter,
         transition_type,
         transition_step,
         transition_duration,
@@ -39,16 +38,12 @@ pub fn change_awww_wallpaper(awww_changer: WallpaperChangers, image: PathBuf, mo
         let mut command = Command::new("awww");
         command
             .arg("img")
-            .arg("--resize")
-            .arg(resize_modes.to_string())
             .arg("--fill-color")
             .arg(fill_color.to_string());
         if monitor != gettext("All") {
             command.arg("--outputs").arg(monitor);
         }
         command
-            .arg("--filter")
-            .arg(scalling_filter.to_string())
             .arg("--transition-type")
             .arg(transition_type.to_string())
             .arg("--transition-step")
@@ -78,18 +73,6 @@ pub fn change_awww_wallpaper(awww_changer: WallpaperChangers, image: PathBuf, mo
 }
 
 pub fn generate_awww_changer_bar(changer_specific_options_box: &Box, settings: Settings) {
-    let resize_dropdown =
-        DropDown::from_strings(&[&gettext("no"), &gettext("crop"), &gettext("fit")]);
-    resize_dropdown.set_margin_top(DEFAULT_MARGIN);
-    resize_dropdown.set_margin_start(DEFAULT_MARGIN);
-    resize_dropdown.set_margin_bottom(DEFAULT_MARGIN);
-    resize_dropdown.set_margin_end(DEFAULT_MARGIN);
-    resize_dropdown.set_halign(Align::Start);
-    resize_dropdown.set_valign(Align::Center);
-    changer_specific_options_box.append(&resize_dropdown);
-    settings
-        .bind("awww-resize", &resize_dropdown, "selected")
-        .build();
     let color_dialog = ColorDialog::builder().with_alpha(false).build();
     let color_picker = ColorDialogButton::builder()
         .halign(Align::Start)
@@ -169,18 +152,7 @@ fn connect_advanced_settings_window_signals(
             .build();
         advanced_settings_window.present();
         advanced_settings_window.set_child(Some(&advanced_settings_window_box));
-        let filter_options_label = create_label("Scalling filter");
-        let filter_dropdown = create_filter_dropdown(&settings);
-        let transition_type_label = create_label("Transition type");
-        let transition_type_dropdown = create_transition_type_dropdown(&settings);
-        let filter_and_transition_box = create_category_box();
-
-        filter_and_transition_box.append(&filter_options_label);
-        filter_and_transition_box.append(&filter_dropdown);
-        filter_and_transition_box.append(&transition_type_label);
-        filter_and_transition_box.append(&transition_type_dropdown);
-        advanced_settings_window_box.append(&filter_and_transition_box);
-
+      
         let transition_step_label = create_label("Transition step");
 
         let transition_step_adjustment =
@@ -375,7 +347,6 @@ fn connect_advanced_settings_window_signals(
         let restore_defaults_button = create_button("Restore Defaults");
 
         restore_defaults_button.connect_clicked(move |_| {
-            filter_dropdown.set_selected(AWWWScallingFilter::default().to_u32());
             transition_step_spinbutton.set_value(90.0);
             transition_duration_spinbutton.set_value(3.0);
             transition_angle_spinbutton.set_value(45.0);
@@ -403,27 +374,6 @@ fn connect_advanced_settings_window_signals(
         window_control_box.append(&window_hide_button);
         advanced_settings_window_box.append(&window_control_box);
     });
-}
-
-fn create_filter_dropdown(settings: &Settings) -> DropDown {
-    let filter_dropdown = DropDown::from_strings(&[
-        &gettext("nearest"),
-        &gettext("bilinear"),
-        &gettext("catmullrom"),
-        &gettext("mitchell"),
-        &gettext("lanczos3"),
-    ]);
-    filter_dropdown.set_margin_top(DEFAULT_MARGIN);
-    filter_dropdown.set_margin_start(DEFAULT_MARGIN);
-    filter_dropdown.set_margin_bottom(DEFAULT_MARGIN);
-    filter_dropdown.set_margin_end(DEFAULT_MARGIN);
-    filter_dropdown.set_halign(Align::Start);
-    filter_dropdown.set_valign(Align::Center);
-    settings
-        .bind("awww-scaling-filter", &filter_dropdown, "selected")
-        .build();
-
-    filter_dropdown
 }
 
 fn create_transition_type_dropdown(settings: &Settings) -> DropDown {

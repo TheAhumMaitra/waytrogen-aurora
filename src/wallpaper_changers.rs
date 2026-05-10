@@ -25,6 +25,7 @@ pub trait U32Enum {
 }
 
 #[derive(Debug, EnumIter, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
 pub enum WallpaperChangers {
     Hyprpaper(HyprpaperFitModes),
     Swaybg(SwaybgModes, String),
@@ -32,7 +33,6 @@ pub enum WallpaperChangers {
     Awww(
         AWWWResizeMode,
         RGB,
-        AWWWScallingFilter,
         AWWWTransitionType,
         u8,
         u32,
@@ -176,10 +176,9 @@ impl WallpaperChangers {
                 MpvPaperSlideshowSettings::default(),
                 String::default(),
             ),
-            Self::Awww(_, _, _, _, _, _, _, _, _, _, _, _) => Self::Awww(
+            Self::Awww(_, _, _, _, _, _, _, _, _, _, _) => Self::Awww(
                 AWWWResizeMode::default(),
                 RGB::default(),
-                AWWWScallingFilter::default(),
                 AWWWTransitionType::default(),
                 u8::default(),
                 u32::default(),
@@ -321,53 +320,6 @@ impl Display for AWWWResizeMode {
             Self::No => write!(f, "no"),
             Self::Crop => write!(f, "crop"),
             Self::Fit => write!(f, "fit"),
-        }
-    }
-}
-
-#[derive(Debug, Default, Serialize, Deserialize, Clone, VariantArray, PartialEq)]
-pub enum AWWWScallingFilter {
-    Nearest,
-    Bilinear,
-    CatmullRom,
-    Mitchell,
-    #[default]
-    Lanczos3,
-}
-
-impl U32Enum for AWWWScallingFilter {
-    fn from_u32(i: u32) -> Self {
-        #[allow(clippy::cast_possible_truncation)]
-        let i = i % Self::VARIANTS.len() as u32;
-        match i {
-            0 => Self::Nearest,
-            1 => Self::Bilinear,
-            2 => Self::CatmullRom,
-            3 => Self::Mitchell,
-            4 => Self::Lanczos3,
-            _ => Self::default(),
-        }
-    }
-
-    fn to_u32(&self) -> u32 {
-        match self {
-            Self::Nearest => 0,
-            Self::Bilinear => 1,
-            Self::CatmullRom => 2,
-            Self::Mitchell => 3,
-            Self::Lanczos3 => 4,
-        }
-    }
-}
-
-impl Display for AWWWScallingFilter {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Nearest => write!(f, "Nearest"),
-            Self::Bilinear => write!(f, "Bilinear"),
-            Self::CatmullRom => write!(f, "CatmullRom"),
-            Self::Mitchell => write!(f, "Mitchell"),
-            Self::Lanczos3 => write!(f, "Lanczos3"),
         }
     }
 }
@@ -638,7 +590,7 @@ impl WallpaperChanger for WallpaperChangers {
             Self::MpvPaper(_, _, _) => {
                 change_mpvpaper_wallpaper(&self, image, &monitor);
             }
-            Self::Awww(_, _, _, _, _, _, _, _, _, _, _, _) => {
+            Self::Awww(_, _, _, _, _, _, _, _, _, _, _) => {
                 change_awww_wallpaper(self, image, monitor);
             }
             Self::GSlapper(_, _, _, _) => {
@@ -991,7 +943,7 @@ impl WallpaperChanger for WallpaperChangers {
                 mpvpaper_formats.append(&mut swaybg_formats);
                 mpvpaper_formats
             }
-            Self::Awww(_, _, _, _, _, _, _, _, _, _, _, _) => {
+            Self::Awww(_, _, _, _, _, _, _, _, _, _, _) => {
                 vec![
                     "gif".to_owned(),
                     "jpeg".to_owned(),
@@ -1061,7 +1013,7 @@ impl WallpaperChanger for WallpaperChangers {
                     .spawn()
                     .and_then(|mut c| c.wait());
             }
-            Self::Awww(_, _, _, _, _, _, _, _, _, _, _, _) => {
+            Self::Awww(_, _, _, _, _, _, _, _, _, _, _) => {
                 let _ = Command::new("pkill")
                     .arg("-9")
                     .arg("awww-daemon")
@@ -1104,7 +1056,7 @@ impl Display for WallpaperChangers {
             Self::Hyprpaper(_) => write!(f, "hyprpaper"),
             Self::Swaybg(_, _) => write!(f, "swaybg"),
             Self::MpvPaper(_, _, _) => write!(f, "mpvpaper"),
-            Self::Awww(_, _, _, _, _, _, _, _, _, _, _, _) => write!(f, "awww"),
+            Self::Awww(_, _, _, _, _, _, _, _, _, _, _) => write!(f, "awww"),
             Self::GSlapper(_, _, _, _) => write!(f, "gslapper"),
         }
     }
@@ -1141,7 +1093,7 @@ pub fn get_available_wallpaper_changers() -> Vec<WallpaperChangers> {
             WallpaperChangers::MpvPaper(_, _, _) => {
                 append_changer_if_in_path(&mut available_changers, changer)
             }
-            WallpaperChangers::Awww(_, _, _, _, _, _, _, _, _, _, _, _) => {
+            WallpaperChangers::Awww(_, _, _, _, _, _, _, _, _, _, _) => {
                 append_changer_if_in_path(&mut available_changers, changer)
             }
             WallpaperChangers::GSlapper(_, _, _, _) => {

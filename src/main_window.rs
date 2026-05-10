@@ -829,9 +829,11 @@ fn create_disable_ui_future(sensitive_widgets_helper: SensitiveWidgetsHelper) {
                         sensitive_widgets_helper.invert_sort_switch.clone(),
                     ),
                 );
-                sensitive_widgets_helper
-                    .image_grid
-                    .scroll_to(0, ListScrollFlags::NONE, None);
+                if sensitive_widgets_helper.image_list_store.n_items() > 0 {
+                    sensitive_widgets_helper
+                        .image_grid
+                        .scroll_to(0, ListScrollFlags::NONE, None);
+                }
             }
         }
     }));

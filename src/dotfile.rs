@@ -47,8 +47,6 @@ pub struct ConfigFile {
     pub awww_resize: u32,
     awww_fill_color_doc: String,
     pub awww_fill_color: String,
-    awww_scaling_filter_doc: String,
-    pub awww_scaling_filter: u32,
     awww_transition_type_doc: String,
     pub awww_transition_type: u32,
     awww_transition_step_doc: String,
@@ -124,8 +122,6 @@ impl Default for ConfigFile {
 	    awww_resize: u32::default(),
 	    awww_fill_color_doc:  gettext("The hex color for awww background fill. Must be six characters long."),
 	    awww_fill_color: String::from("000000"),
-	    awww_scaling_filter_doc: gettext("The internal numeric identifier in the changer dropdown used by dconf for the currently selected awww scaling filter option. Do not change unless you know what you are doing."),
-	    awww_scaling_filter: u32::default(),
 	    awww_transition_type_doc: gettext("The internal numeric identifier in the changer dropdown used by dconf for the currently selected awww transition type option. Do not change unless you know what you are doing."),
 	    awww_transition_type: 1,
 	    awww_transition_step_doc: gettext("How fast the transition approaches the new image used by awww."),
@@ -220,8 +216,6 @@ impl ConfigFile {
         let awww_resize = settings.uint("awww-resize");
         trace!("Getting awww-fill-color gsetting");
         let awww_fill_color = settings.string("awww-fill-color").to_string();
-        trace!("Getting awww-scaling-filter gsetting");
-        let awww_scaling_filter = settings.uint("awww-scaling-filter");
         trace!("Getting awww-transition-type gsetting");
         let awww_transition_type = settings.uint("awww-transition-type");
         trace!("Getting awww-transition-step gsetting");
@@ -280,7 +274,6 @@ impl ConfigFile {
             selected_monitor_item,
             awww_resize,
             awww_fill_color,
-            awww_scaling_filter,
             awww_transition_type,
             awww_transition_step,
             awww_transition_duration,
@@ -344,8 +337,6 @@ impl ConfigFile {
         settings.set_uint("awww-resize", self.awww_resize)?;
         trace!("Setting awww-fill-color gsetting");
         settings.set_string("awww-fill-color", &self.awww_fill_color)?;
-        trace!("Setting awww-scaling-filter gsetting");
-        settings.set_uint("awww-scaling-filter", self.awww_scaling_filter)?;
         trace!("Setting awww-transition-type gsetting");
         settings.set_uint("awww-transition-type", self.awww_transition_type)?;
         trace!("Setting awww-transition-step gsetting");
