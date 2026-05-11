@@ -1,6 +1,6 @@
 use crate::{
     common::RGB,
-    ui_common::DEFAULT_MARGIN,
+    ui_common::{add_escape_key_handler, DEFAULT_MARGIN},
     wallpaper_changers::{
         AWWWTransitionBezier, AWWWTransitionPosition,
         WallpaperChangers,
@@ -118,6 +118,13 @@ pub fn generate_awww_changer_bar(changer_specific_options_box: &Box, settings: S
         .title(gettext("AWWW Advanced Image Settings"))
         .hide_on_close(true)
         .build();
+    add_escape_key_handler(&advanced_settings_window, clone!(
+        #[weak]
+        advanced_settings_window,
+        move || {
+            advanced_settings_window.set_visible(false);
+        }
+    ));
     let advanced_settings_button = Button::builder()
         .margin_top(DEFAULT_MARGIN)
         .margin_start(DEFAULT_MARGIN)

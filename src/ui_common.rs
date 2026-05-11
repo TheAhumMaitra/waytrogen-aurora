@@ -18,9 +18,9 @@ use async_channel::Sender;
 use gettextrs::gettext;
 use gtk::{
     self,
-    gdk::Display,
+    gdk::{Display, Key},
     gio::{spawn_blocking, ListStore, Settings},
-    glib::Object,
+    glib::{Object, Propagation},
     prelude::*,
     Box, DropDown, GridView, ListItem, ListScrollFlags, StringObject, Switch,
 };
@@ -37,6 +37,22 @@ use std::{
 
 pub const SORT_DROPDOWN_STRINGS: [&str; 2] = ["Date", "Name"];
 pub const DEFAULT_MARGIN: i32 = 12;
+
+pub fn add_escape_key_handler<W, F>(widget: &W, on_escape: F)
+where
+    W: IsA<gtk::Widget>,
+    F: Fn() + 'static,
+{
+    let key_controller = gtk::EventControllerKey::new();
+    key_controller.connect_key_pressed(move |_, key, _, _| {
+        if key == Key::Escape {
+            on_escape();
+            return Propagation::Stop;
+        }
+        Propagation::Proceed
+    });
+    widget.add_controller(key_controller);
+}
 
 pub fn generate_image_files(
     path: String,

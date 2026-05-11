@@ -2,6 +2,7 @@ use crate::{
     cli::Cli,
     common::{CacheImageFile, GtkPictureFile, Wallpaper, APP_ID, BUTTON_HEIGHT, BUTTON_WIDTH},
     ui_common::{
+        add_escape_key_handler,
         change_image_button_handlers, compare_image_list_items_by_sort_selection_comparitor,
         generate_changer_bar, generate_image_files, get_available_monitors, get_selected_changer,
         gschema_string_to_string, hide_unsupported_files, sort_images, string_to_gschema_string,
@@ -855,6 +856,14 @@ fn create_application_window(app: &Application) -> ApplicationWindow {
         .application(app)
         .title("Watering")
         .build();
+    add_escape_key_handler(&window, clone!(
+        #[weak]
+        app,
+        move || {
+            app.quit();
+        }
+    ));
+
     window.set_default_size(1024, 600);
     window.present();
     window

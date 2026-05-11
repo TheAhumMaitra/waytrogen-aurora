@@ -235,7 +235,10 @@ pub struct Wallpaper {
     pub changer: WallpaperChangers,
 }
 
-pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const APP_VERSION: &str = concat!(
+    "Wayrogen for Aurora. Modified by Ahum Maitra. You are using ",
+    env!("CARGO_PKG_VERSION")
+);
 
 pub fn sort_by_sort_dropdown_string(files: &mut [PathBuf], sort_by: &str, invert_sort: bool) {
     match sort_by {
