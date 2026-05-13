@@ -383,39 +383,6 @@ fn connect_advanced_settings_window_signals(
     });
 }
 
-fn create_transition_type_dropdown(settings: &Settings) -> DropDown {
-    let transition_type_dropdown = DropDown::from_strings(&[
-        &gettext("none"),
-        &gettext("simple"),
-        &gettext("fade"),
-        &gettext("left"),
-        &gettext("right"),
-        &gettext("top"),
-        &gettext("bottom"),
-        &gettext("wipe"),
-        &gettext("wave"),
-        &gettext("grow"),
-        &gettext("center"),
-        &gettext("any"),
-        &gettext("outer"),
-        &gettext("random"),
-    ]);
-    transition_type_dropdown.set_margin_top(DEFAULT_MARGIN);
-    transition_type_dropdown.set_margin_start(DEFAULT_MARGIN);
-    transition_type_dropdown.set_margin_bottom(DEFAULT_MARGIN);
-    transition_type_dropdown.set_margin_end(DEFAULT_MARGIN);
-    transition_type_dropdown.set_halign(Align::Start);
-    transition_type_dropdown.set_valign(Align::Center);
-    settings
-        .bind(
-            "awww-transition-type",
-            &transition_type_dropdown,
-            "selected",
-        )
-        .build();
-    transition_type_dropdown
-}
-
 fn create_category_box() -> Box {
     Box::builder()
         .orientation(gtk::Orientation::Horizontal)

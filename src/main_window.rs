@@ -940,7 +940,7 @@ fn create_image_filter_entry(
         .margin_start(DEFAULT_MARGIN)
         .margin_bottom(DEFAULT_MARGIN)
         .margin_end(DEFAULT_MARGIN)
-        .placeholder_text(gettext("Find images"))
+        .placeholder_text(gettext("🔍 Search..."))
         .has_tooltip(true)
         .tooltip_text(gettext(
             "Filter wallpapers based on the name. Fuzzy matching the name.",
