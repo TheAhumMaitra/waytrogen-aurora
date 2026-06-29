@@ -1,0 +1,388 @@
+/* ── Color Definitions ─────────────────────────────────────────────────── */
+/* Colors sourced from ~/.config/hypr/scripts/src/colors.css (Aurora theme) */
+@define-color accent #101419;
+@define-color active-background #1c252c;
+@define-color active-accent #c68aee;
+@define-color urgent-background #e05f65;
+@define-color border #384148;
+@define-color surface #0f1317;
+@define-color surface-alt #1c252c;
+@define-color muted #777c85;
+@define-color theme_bg_color #101419;
+@define-color theme_fg_color #b6beca;
+@define-color accent_bg_color #c68aee;
+@define-color success_color #78dba9;
+@define-color warning_color #f1cf8a;
+
+/* ── Global ────────────────────────────────────────────────────────────── */
+window {
+    background-color: @theme_bg_color;
+    color: @theme_fg_color;
+}
+
+box {
+    background-color: transparent;
+}
+
+label {
+    color: @theme_fg_color;
+    caret-color: @active-accent;
+}
+
+/* ── Application box ───────────────────────────────────────────────────── */
+.application-box {
+    background-color: @surface;
+}
+
+/* ── Scrolled Window / Grid View ──────────────────────────────────────── */
+scrolledwindow {
+    background-color: @surface;
+    border: none;
+}
+
+scrolledwindow undershoot.top,
+scrolledwindow undershoot.bottom,
+scrolledwindow undershoot.left,
+scrolledwindow undershoot.right {
+    background: none;
+}
+
+gridview {
+    background-color: @surface;
+}
+
+gridview > child {
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    transition: all 150ms ease;
+}
+
+gridview > child:hover {
+    border-color: @border;
+    background-color: alpha(@active-accent, 0.05);
+}
+
+gridview > child:selected {
+    background-color: alpha(@active-accent, 0.15);
+    border-color: @active-accent;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+button {
+    background-color: @surface-alt;
+    color: @theme_fg_color;
+    border: 1px solid @border;
+    border-radius: 6px;
+    padding: 4px 12px;
+    transition: all 150ms ease;
+}
+
+button:hover {
+    background-color: @active-background;
+    border-color: @active-accent;
+}
+
+button:active,
+button:checked {
+    background-color: alpha(@active-accent, 0.2);
+    border-color: @active-accent;
+}
+
+button:disabled,
+button:insensitive {
+    background-color: @surface;
+    color: @muted;
+    border-color: @border;
+}
+
+/* Wallpaper thumbnail buttons */
+button.image-button {
+    padding: 0;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-color: transparent;
+}
+
+button.image-button:hover {
+    border-color: @active-accent;
+    background-color: alpha(@active-accent, 0.1);
+}
+
+button.image-button:selected {
+    border-color: @active-accent;
+    background-color: alpha(@active-accent, 0.2);
+}
+
+/* ── Entry / Search ────────────────────────────────────────────────────── */
+entry {
+    background-color: @surface-alt;
+    color: @theme_fg_color;
+    border: 1px solid @border;
+    border-radius: 6px;
+    padding: 6px 12px;
+    caret-color: @active-accent;
+}
+
+entry:focus {
+    border-color: @active-accent;
+    background-color: @active-background;
+}
+
+entry:disabled {
+    background-color: @surface;
+    color: @muted;
+}
+
+/* ── DropDown ──────────────────────────────────────────────────────────── */
+dropdown {
+    background-color: @surface-alt;
+    color: @theme_fg_color;
+    border: 1px solid @border;
+    border-radius: 6px;
+    padding: 4px 8px;
+    min-height: 30px;
+}
+
+dropdown:hover {
+    border-color: @active-accent;
+}
+
+dropdown:focus {
+    border-color: @active-accent;
+}
+
+dropdown popover {
+    background-color: @surface;
+    border: 1px solid @border;
+    border-radius: 8px;
+    padding: 4px;
+}
+
+dropdown popover list {
+    background-color: @surface;
+    border: none;
+}
+
+dropdown popover row {
+    background-color: transparent;
+    color: @theme_fg_color;
+    border-radius: 4px;
+    padding: 6px 12px;
+}
+
+dropdown popover row:hover {
+    background-color: @active-background;
+}
+
+dropdown popover row:selected {
+    background-color: alpha(@active-accent, 0.2);
+    color: @active-accent;
+}
+
+/* ── MenuButton ────────────────────────────────────────────────────────── */
+menubutton {
+    background-color: @surface-alt;
+    color: @theme_fg_color;
+    border: 1px solid @border;
+    border-radius: 6px;
+    padding: 4px 12px;
+}
+
+menubutton:hover {
+    border-color: @active-accent;
+    background-color: @active-background;
+}
+
+menubutton popover {
+    background-color: @surface;
+    border: 1px solid @border;
+    border-radius: 8px;
+    padding: 8px;
+}
+
+/* ── Popover ───────────────────────────────────────────────────────────── */
+popover {
+    background-color: @surface;
+    border: 1px solid @border;
+    border-radius: 10px;
+    padding: 4px;
+}
+
+popover > contents {
+    background-color: @surface;
+    border: none;
+    border-radius: 10px;
+}
+
+/* ── Switch ────────────────────────────────────────────────────────────── */
+switch {
+    background-color: @surface-alt;
+    border: 1px solid @border;
+    border-radius: 12px;
+}
+
+switch:hover {
+    border-color: @active-accent;
+}
+
+switch:checked {
+    background-color: alpha(@active-accent, 0.3);
+    border-color: @active-accent;
+}
+
+switch slider {
+    background-color: @muted;
+    border-radius: 50%;
+    min-width: 16px;
+    min-height: 16px;
+}
+
+switch:checked slider {
+    background-color: @active-accent;
+}
+
+/* ── ProgressBar ───────────────────────────────────────────────────────── */
+progressbar {
+    background-color: @surface-alt;
+    border: 1px solid @border;
+    border-radius: 6px;
+    min-height: 8px;
+}
+
+progressbar trough {
+    background-color: @surface-alt;
+    border-radius: 6px;
+    min-height: 8px;
+}
+
+progressbar progress {
+    background-color: @active-accent;
+    border-radius: 6px;
+    min-height: 8px;
+}
+
+/* ── SpinButton ────────────────────────────────────────────────────────── */
+spinbutton {
+    background-color: @surface-alt;
+    color: @theme_fg_color;
+    border: 1px solid @border;
+    border-radius: 6px;
+}
+
+spinbutton:hover {
+    border-color: @active-accent;
+}
+
+spinbutton:focus {
+    border-color: @active-accent;
+}
+
+spinbutton entry {
+    background-color: transparent;
+    border: none;
+    color: @theme_fg_color;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────────── */
+scrollbar {
+    background-color: @surface;
+    border: none;
+}
+
+scrollbar range {
+    background-color: transparent;
+}
+
+scrollbar slider {
+    background-color: @border;
+    border-radius: 4px;
+    min-width: 6px;
+    min-height: 30px;
+}
+
+scrollbar slider:hover {
+    background-color: @muted;
+}
+
+scrollbar slider:active {
+    background-color: @active-accent;
+}
+
+/* ── Tooltip ───────────────────────────────────────────────────────────── */
+tooltip {
+    background-color: @surface;
+    border: 1px solid @border;
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+
+tooltip label {
+    color: @theme_fg_color;
+}
+
+/* ── ColorDialogButton ─────────────────────────────────────────────────── */
+colorswatch {
+    border-radius: 6px;
+    border: 1px solid @border;
+}
+
+colorswatch:hover {
+    border-color: @active-accent;
+}
+
+/* ── Text widget ───────────────────────────────────────────────────────── */
+text {
+    background-color: @surface-alt;
+    color: @theme_fg_color;
+    border: 1px solid @border;
+    border-radius: 6px;
+    padding: 4px 8px;
+    caret-color: @active-accent;
+}
+
+text:focus {
+    border-color: @active-accent;
+}
+
+/* ── Frame ─────────────────────────────────────────────────────────────── */
+frame {
+    border: 1px solid @border;
+    border-radius: 6px;
+}
+
+frame label {
+    color: @muted;
+}
+
+/* ── Dialog ────────────────────────────────────────────────────────────── */
+dialog {
+    background-color: @theme_bg_color;
+}
+
+dialog .dialog-action-area button {
+    padding: 6px 18px;
+}
+
+/* ── Separator ─────────────────────────────────────────────────────────── */
+separator {
+    background-color: @border;
+    min-height: 1px;
+}
+
+/* ── Helper color classes ──────────────────────────────────────────────── */
+.success {
+    color: @success_color;
+}
+
+.warning {
+    color: @warning_color;
+}
+
+.error {
+    color: @urgent-background;
+}
+
+.muted {
+    color: @muted;
+}
