@@ -17,9 +17,10 @@ use gtk::{
     gio::{self, spawn_blocking, Cancellable, ListStore, Settings},
     glib::{self, clone, spawn_future_local, Bytes},
     prelude::*,
-    Align, Application, ApplicationWindow, Box, Button, DropDown, Entry, FileDialog, GridView,
-    Label, ListItem, ListScrollFlags, MenuButton, Orientation, Picture, Popover, ProgressBar,
-    ScrolledWindow, SignalListItemFactory, SingleSelection, StringObject, Switch, Text, TextBuffer,
+    Align, Application, ApplicationWindow, Box, Button, CssProvider, DropDown, Entry, FileDialog,
+    GridView, Label, ListItem, ListScrollFlags, MenuButton, Orientation, Picture, Popover,
+    ProgressBar, ScrolledWindow, SignalListItemFactory, SingleSelection, StringObject, Switch, Text,
+    TextBuffer,
 };
 use log::{debug, trace};
 use std::{path::PathBuf, process::Command};
@@ -40,6 +41,7 @@ struct SensitiveWidgetsHelper {
 }
 
 pub fn build_ui(app: &Application, args: &Cli) {
+    load_css();
     let window = create_application_window(app);
     if get_available_wallpaper_changers().is_empty() {
         create_no_changers_window(&window);
@@ -192,6 +194,21 @@ pub fn build_ui(app: &Application, args: &Cli) {
         settings,
     );
     window.set_child(Some(&application_box));
+}
+
+/// Load the application CSS stylesheet embedded at compile time via `include_str!`.
+///
+/// The stylesheet is sourced from `src/style.css`, which uses `@define-color` variables
+/// from the Aurora theme defined in `~/.config/hypr/scripts/src/colors.css`.
+fn load_css() {
+    let provider = CssProvider::new();
+    provider.load_from_string(include_str!("style.css"));
+    // Apply globally to all windows
+    gtk::style_context_add_provider_for_display(
+        &gdk::Display::default().expect("Could not connect to a display"),
+        &provider,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
 }
 
 fn setup_image_signal_list_item_factory(
