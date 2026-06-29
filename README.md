@@ -1,5 +1,7 @@
 <h3 align="center">
 	<img src="https://github.com/JaKooLit/Telegram-Animated-Emojis/blob/main/Activity/Sparkles.webp" alt="Sparkles" width="38" height="50" />
+	    $${\color{red}Waytrogen for Aurora \space \color{lightblue}- \space \color{orange}Wallpaper\space setter\space for\space wayland}$$
+	<img src="https://github.com/JaKooLit/Telegram-Animated-Emojis/blob/main/Activity/Sparkles.webp" alt="Sparkles" width="38" height="50" />
 </h3>
 
 <div align="center">
