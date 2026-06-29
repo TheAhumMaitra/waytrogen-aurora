@@ -1,6 +1,6 @@
 <h3 align="center">
 	<img src="https://github.com/JaKooLit/Telegram-Animated-Emojis/blob/main/Activity/Sparkles.webp" alt="Sparkles" width="38" height="50" />
-    $${\color{red}Waytrogen \space \color{lightblue}- \space \color{orange}Wallpaper\space setter\space for\space wayland}$$
+    $${\color{red}Waytrogen for Aurora \space \color{lightblue}- \space \color{orange}Wallpaper\space setter\space for\space wayland}$$
 	<img src="https://github.com/JaKooLit/Telegram-Animated-Emojis/blob/main/Activity/Sparkles.webp" alt="Sparkles" width="38" height="50" />
 </h3>
 
@@ -13,6 +13,9 @@
 <div align="center">
 A GUI wallpaper setter modified for Aurora that is a spiritual successor for the minimalistic Written purely in the <code>Rust</code>
 </div>
+
+## Note
+No option for scaling filter in *awww*. Supports each theme's color pallate
 
 ## Features
 - Recursive and lightning fast file searching
