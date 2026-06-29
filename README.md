@@ -4,7 +4,7 @@
 	<img src="https://github.com/JaKooLit/Telegram-Animated-Emojis/blob/main/Activity/Sparkles.webp" alt="Sparkles" width="38" height="50" />
 </h3>
 
-https://github.com/user-attachments/assets/ebfc8fce-d546-42a8-8ece-a51e66894db5
+https://github.com/user-attachments/assets/775c70be-9e70-45eb-99df-869d6ef8c969
 
 ---
 
