@@ -55,7 +55,7 @@ where
 }
 
 pub fn generate_image_files(
-    path: String,
+    paths: Vec<PathBuf>,
     sender_cache_images: Sender<CacheImageFile>,
     sort_dropdown: String,
     invert_sort_switch_state: bool,
@@ -66,7 +66,7 @@ pub fn generate_image_files(
         sender_changer_options
             .send_blocking(false)
             .unwrap_or_else(|_| panic!("{}", gettext("The channel must be open")));
-        let files = get_image_files(&path, &sort_dropdown, invert_sort_switch_state);
+        let files = get_image_files(&paths, &sort_dropdown, invert_sort_switch_state);
 
         let time_before_load = Local::now();
         for (index, file) in files.iter().enumerate() {

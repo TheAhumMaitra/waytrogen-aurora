@@ -6,9 +6,12 @@ use waytrogen::{
     cli::{
         cycle_next_wallpaper, delete_image_cache, launch_application, print_app_version,
         print_wallpaper_state, resolve_open_folder, restore_wallpapers, set_random_wallpapers, Cli,
+        Command,
     },
     common::APP_ID,
     dotfile::{self, get_config_file},
+    fs::mixture_folders,
+    main_window::set_mixture_folders,
 };
 
 fn main() -> glib::ExitCode {
@@ -37,6 +40,15 @@ fn main() -> glib::ExitCode {
 
     if args.external_script.is_none() && !config_file.executable_script.is_empty() {
         args.external_script = Some(config_file.executable_script);
+    }
+
+    // Stored before dispatching so that the window, `--next` and `--random` all
+    // use the same folders.
+    if matches!(args.command, Some(Command::Mixture)) {
+        let settings = Settings::new(APP_ID);
+        if set_mixture_folders(&settings, &mixture_folders()).is_empty() {
+            error!("No wallpaper folders found for the mixture");
+        }
     }
 
     if args.restore {

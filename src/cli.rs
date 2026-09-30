@@ -3,7 +3,7 @@ use crate::{
         parse_executable_script, sort_by_sort_dropdown_string, Wallpaper, APP_ID, APP_VERSION,
         CACHE_FILE_NAME, CONFIG_APP_NAME, GETTEXT_DOMAIN,
     },
-    main_window::build_ui,
+    main_window::{build_ui, stored_mixture_folders},
     matugen::Matugen,
     ui_common::{gschema_string_to_string, string_to_gschema_string, SORT_DROPDOWN_STRINGS},
     wallpaper_changers::{WallpaperChanger, WallpaperChangers},
@@ -73,14 +73,23 @@ fn get_previous_wallpapers(settings: &Settings) -> Vec<Wallpaper> {
 
 fn get_previous_supported_wallpapers(settings: &Settings) -> Vec<PathBuf> {
     let previous_wallpapers = get_previous_wallpapers(settings);
-    let wallpaper = previous_wallpapers[0].clone();
-    let path = Path::new(&wallpaper.path)
-        .parent()
-        .unwrap_or_else(|| Path::new(""));
-    let files = walkdir::WalkDir::new(path)
-        .follow_links(true)
-        .follow_root_links(true)
-        .into_iter()
+    let mixture = stored_mixture_folders(settings);
+    let paths = if mixture.is_empty() {
+        vec![Path::new(&previous_wallpapers[0].clone().path)
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .to_path_buf()]
+    } else {
+        mixture
+    };
+    paths
+        .iter()
+        .flat_map(|path| {
+            walkdir::WalkDir::new(path)
+                .follow_links(true)
+                .follow_root_links(true)
+                .into_iter()
+        })
         .filter_map(std::result::Result::ok)
         .filter(|f| f.file_type().is_file())
         .map(|d| d.path().to_path_buf())
@@ -98,8 +107,7 @@ fn get_previous_supported_wallpapers(settings: &Settings) -> Vec<PathBuf> {
                     })
                 })
         })
-        .collect::<Vec<_>>();
-    files
+        .collect::<Vec<_>>()
 }
 
 #[must_use]
@@ -346,6 +354,10 @@ pub enum Command {
         /// Path to the wallpaper folder.
         path: PathBuf,
     },
+    /// Mix every theme folder in `~/.config/themes` together with
+    /// `Pictures/Wallpapers`, then use them for the window, `--next` and
+    /// `--random`. Picking a folder in the window leaves the mixture.
+    Mixture,
 }
 
 #[derive(Parser, Clone)]
@@ -385,4 +397,92 @@ pub struct Cli {
     #[arg(long, global = true)]
     /// Run `matugen image <wallpaper>` before applying the wallpaper(s). Launches the app when used on its own.
     pub matugen: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(args: &[&str]) -> Cli {
+        let mut argv = vec!["waytrogen"];
+        argv.extend_from_slice(args);
+        Cli::try_parse_from(argv).expect("Arguments should be valid")
+    }
+
+    #[test]
+    fn open_takes_a_folder() {
+        let args = parse(&["open", "/tmp/wallpapers"]);
+        let Some(Command::Open { path }) = args.command else {
+            panic!("open should be parsed as a subcommand");
+        };
+        assert_eq!(path, PathBuf::from("/tmp/wallpapers"));
+    }
+
+    #[test]
+    fn open_requires_a_folder() {
+        assert!(Cli::try_parse_from(["waytrogen", "open"]).is_err());
+    }
+
+    #[test]
+    fn open_and_matugen_work_together() {
+        for args in [
+            ["open", "/tmp/wallpapers", "--matugen"],
+            ["--matugen", "open", "/tmp/wallpapers"],
+        ] {
+            let cli = parse(&args);
+            assert!(cli.matugen, "{args:?} should enable matugen");
+            assert!(
+                matches!(cli.command, Some(Command::Open { .. })),
+                "{args:?} should open a folder"
+            );
+        }
+    }
+
+    #[test]
+    fn options_without_a_subcommand_still_work() {
+        assert!(parse(&["--restore"]).restore);
+        assert!(parse(&["--random"]).random);
+        assert!(parse(&["-r"]).restore);
+        assert_eq!(parse(&["--next", "All"]).next.as_deref(), Some("All"));
+        assert!(parse(&["--version"]).version);
+        assert!(parse(&["--matugen"]).matugen);
+        assert!(!parse(&[]).matugen);
+        assert!(parse(&["open", "/tmp/wallpapers"]).command.is_some());
+    }
+
+    #[test]
+    fn resolving_a_folder_requires_an_existing_directory() {
+        let missing = parse(&["open", "/tmp/waytrogen-does-not-exist"]);
+        assert!(resolve_open_folder(&missing).is_err());
+
+        let file = std::env::temp_dir().join("waytrogen-not-a-directory");
+        std::fs::write(&file, "").expect("Failed to write temporary file");
+        let args = Cli {
+            command: Some(Command::Open { path: file.clone() }),
+            ..parse(&[])
+        };
+        let result = resolve_open_folder(&args);
+        let _ = std::fs::remove_file(&file);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn resolving_a_folder_makes_it_absolute() {
+        let relative = Cli {
+            command: Some(Command::Open {
+                path: PathBuf::from("./src"),
+            }),
+            ..parse(&[])
+        };
+        let folder = resolve_open_folder(&relative)
+            .expect("src should resolve")
+            .expect("a folder was given");
+        assert!(folder.is_absolute(), "{folder:?} should be absolute");
+        assert!(folder.is_dir());
+    }
+
+    #[test]
+    fn no_folder_is_resolved_without_the_subcommand() {
+        assert_eq!(resolve_open_folder(&parse(&["--matugen"])), Ok(None));
+    }
 }

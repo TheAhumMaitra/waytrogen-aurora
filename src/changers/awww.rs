@@ -15,7 +15,7 @@ use gtk::{
     Adjustment, Align, Box, Button, ColorDialog, ColorDialogButton, DropDown, Entry, Label,
     SpinButton, Switch, TextBuffer, Window,
 };
-use log::{debug, error};
+use log::{debug, error, warn};
 use std::{
     path::PathBuf,
     process::{Command, Stdio},
@@ -31,7 +31,7 @@ fn awww_daemon_is_running() -> bool {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .map_or(false, |status| status.success())
+        .is_ok_and(|status| status.success())
 }
 
 pub fn change_awww_wallpaper(awww_changer: WallpaperChangers, image: PathBuf, monitor: String) {
@@ -57,8 +57,9 @@ pub fn change_awww_wallpaper(awww_changer: WallpaperChangers, image: PathBuf, mo
                 .spawn()
                 .and_then(|mut daemon| daemon.wait())
             {
-                error!("Failed to start awww daemon, {e}");
-                return;
+                // Another instance can win the race for the socket, and the daemon
+                // that is already up serves this request just fine.
+                warn!("Failed to start awww daemon, {e}");
             }
         }
         let mut command = Command::new("awww");

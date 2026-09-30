@@ -5,6 +5,10 @@
 			<default>""</default>
 			<summary>Wallpaper directory</summary>
 		</key>
+		<key name="wallpaper-folders" type="as">
+			<default>[]</default>
+			<summary>Wallpaper directories mixed together by the mixture subcommand. Empty means only wallpaper-folder is used.</summary>
+		</key>
 		<key name="saved-wallpapers" type="s">
 			<default>"[]"</default>
 		</key>

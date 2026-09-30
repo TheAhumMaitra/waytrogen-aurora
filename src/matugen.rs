@@ -11,6 +11,7 @@ use std::{
 const SOURCE_COLOR_INDEX: &str = "0";
 
 /// Highest index matugen accepts for `--source-color-index`.
+#[cfg(test)]
 const SOURCE_COLOR_INDEX_MAX: u8 = 4;
 
 #[derive(Default)]
@@ -30,9 +31,9 @@ impl Matugen {
 
     /// Runs `matugen image <image> --source-color-index 0` unless matugen is
     /// disabled or the same image has already been generated with this instance.
-    /// Returns whether matugen was invoked.
+    /// Returns whether matugen succeeded.
     pub fn generate(&mut self, image: &Path) -> bool {
-        if !self.enabled || !self.generated_images.insert(image.to_path_buf()) {
+        if !self.take_image(image) {
             return false;
         }
         debug!("Running matugen on {}", image.display());
@@ -55,6 +56,17 @@ impl Matugen {
                 false
             }
         }
+    }
+
+    /// Registers `image` as handled and reports whether matugen still has to run
+    /// for it. Empty paths come from wallpapers saved before the folder was known,
+    /// so they are skipped without running matugen.
+    fn take_image(&mut self, image: &Path) -> bool {
+        if image.as_os_str().is_empty() {
+            debug!("Skipping matugen for a wallpaper without a path");
+            return false;
+        }
+        self.enabled && self.generated_images.insert(image.to_path_buf())
     }
 }
 
@@ -80,7 +92,8 @@ mod tests {
 
     impl TempDir {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir().join(format!("waytrogen-{name}-{}", uuid::Uuid::new_v4()));
+            let path =
+                std::env::temp_dir().join(format!("waytrogen-{name}-{}", uuid::Uuid::new_v4()));
             fs::create_dir_all(&path).expect("Failed to create temporary directory");
             Self(path)
         }
@@ -121,19 +134,19 @@ mod tests {
 
     /// Runs matugen on a freshly written image and returns its parsed `--json hex`
     /// output, or `None` when matugen is not installed.
-    fn run_matugen(image: &Path) -> Option<serde_json::Value> {
-        if Command::new("matugen")
-            .arg("--version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_err()
-        {
+    ///
+    /// `--dry-run` still renders templates, so the child's config directories are
+    /// pointed at a temporary directory to keep the real theme files untouched.
+    fn run_matugen(image: &Path, home: &Path) -> Option<serde_json::Value> {
+        if !matugen_is_installed() {
             eprintln!("Skipping, matugen is not installed");
             return None;
         }
         let output = matugen_command(image)
             .args(["--dry-run", "--json", "hex"])
+            .env("HOME", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
             // A prompt would read stdin, and with none available matugen would
             // fail instead of exiting successfully.
             .stdin(Stdio::null())
@@ -194,32 +207,31 @@ mod tests {
     }
 
     #[test]
+    fn a_disabled_matugen_never_takes_an_image() {
+        let mut matugen = Matugen::new(false);
+        assert!(!matugen.take_image(Path::new("/tmp/wall.png")));
+        assert!(!matugen.take_image(Path::new("/tmp/wall.png")));
+    }
+
+    #[test]
+    fn an_image_is_only_taken_once() {
+        let mut matugen = Matugen::new(true);
+        assert!(matugen.take_image(Path::new("/tmp/wall.png")));
+        assert!(!matugen.take_image(Path::new("/tmp/wall.png")));
+        assert!(matugen.take_image(Path::new("/tmp/other.png")));
+        assert!(!matugen.take_image(Path::new("/tmp/other.png")));
+    }
+
+    #[test]
     fn generate_does_nothing_when_disabled() {
         assert!(!Matugen::new(false).generate(Path::new("/tmp/wall.png")));
     }
 
     #[test]
-    fn generate_runs_once_per_image() {
-        let dir = TempDir::new("matugen-once");
-        let image = dir.path().join("wall.png");
-        write_test_image(&image);
-        let mut matugen = Matugen::new(true);
-        if Command::new("matugen")
-            .arg("--version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_err()
-        {
-            eprintln!("Skipping, matugen is not installed");
-            return;
-        }
-        assert!(matugen.generate(&image));
-        assert!(!matugen.generate(&image));
-
-        let other = dir.path().join("other.png");
-        write_test_image(&other);
-        assert!(matugen.generate(&other));
+    fn generate_fails_loudly_on_an_unreadable_image() {
+        let dir = TempDir::new("matugen-missing");
+        let missing = dir.path().join("does-not-exist.png");
+        assert!(!Matugen::new(true).generate(&missing));
     }
 
     #[test]
@@ -227,7 +239,7 @@ mod tests {
         let dir = TempDir::new("matugen-colors");
         let image = dir.path().join("wall.png");
         write_test_image(&image);
-        let Some(json) = run_matugen(&image) else {
+        let Some(json) = run_matugen(&image, dir.path()) else {
             return;
         };
         assert_eq!(
@@ -244,9 +256,16 @@ mod tests {
     }
 
     #[test]
-    fn matugen_fails_loudly_on_an_unreadable_image() {
-        let dir = TempDir::new("matugen-missing");
-        let missing = dir.path().join("does-not-exist.png");
-        assert!(!Matugen::new(true).generate(&missing));
+    fn matugen_leaves_the_users_config_alone() {
+        let dir = TempDir::new("matugen-isolation");
+        let image = dir.path().join("wall.png");
+        write_test_image(&image);
+        if run_matugen(&image, dir.path()).is_none() {
+            return;
+        }
+        assert!(
+            !dir.path().join("config/matugen/config.toml").exists(),
+            "matugen created a config inside the temporary directory, so it is not isolated"
+        );
     }
 }

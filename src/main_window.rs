@@ -23,7 +23,7 @@ use gtk::{
     ProgressBar, ScrolledWindow, SignalListItemFactory, SingleSelection, StringObject, Switch, Text,
     TextBuffer,
 };
-use log::{debug, trace};
+use log::{debug, error, trace};
 use std::{
     path::{Path, PathBuf},
     process::Command,
@@ -55,9 +55,9 @@ pub fn build_ui(app: &Application, args: &Cli) {
     let image_list_store = ListStore::new::<GtkPictureFile>();
     let removed_images_list_store = ListStore::new::<GtkPictureFile>();
     let folder_path_buffer = create_folder_path_buffer(&settings);
-    let path = textbuffer_to_string(&folder_path_buffer);
+    let path = wallpaper_folders(&settings, &folder_path_buffer);
 
-    log::trace!("{}: {}", gettext("Wallpaper Folder"), path);
+    log::trace!("{}: {path:?}", gettext("Wallpaper Folder"));
 
     let (sender_cache_images, receiver_cache_images): (
         Sender<CacheImageFile>,
@@ -160,6 +160,7 @@ pub fn build_ui(app: &Application, args: &Cli) {
         ),
         &selected_sort_method,
         sender_cache_images,
+        &settings,
     );
 
     let application_box = create_application_box();
@@ -506,6 +507,53 @@ fn create_folder_path_buffer(settings: &Settings) -> TextBuffer {
     folder_path_buffer
 }
 
+/// The mixture folders stored by `waytrogen mixture`, empty when the app is not
+/// in mixture mode.
+#[must_use]
+pub fn stored_mixture_folders(settings: &Settings) -> Vec<PathBuf> {
+    settings
+        .strv("wallpaper-folders")
+        .iter()
+        .map(|folder| PathBuf::from(folder.to_string()))
+        .filter(|folder| folder.is_dir())
+        .collect()
+}
+
+/// The folders wallpapers are loaded from: the mixture set up by
+/// `waytrogen mixture` when there is one, otherwise the single selected folder.
+#[must_use]
+pub fn wallpaper_folders(settings: &Settings, folder_path_buffer: &TextBuffer) -> Vec<PathBuf> {
+    let mixture = stored_mixture_folders(settings);
+    if !mixture.is_empty() {
+        return mixture;
+    }
+    let folder = textbuffer_to_string(folder_path_buffer);
+    if folder.is_empty() {
+        Vec::new()
+    } else {
+        vec![PathBuf::from(folder)]
+    }
+}
+
+/// Stores `folders` as the mixture used by the app, dropping the ones that no
+/// longer exist, and returns what was stored.
+pub fn set_mixture_folders(settings: &Settings, folders: &[PathBuf]) -> Vec<PathBuf> {
+    let folders: Vec<PathBuf> = folders
+        .iter()
+        .filter(|folder| folder.is_dir())
+        .cloned()
+        .collect();
+    debug!("Using wallpaper folders {folders:?}");
+    let strv: Vec<&str> = folders
+        .iter()
+        .filter_map(|folder| folder.to_str())
+        .collect();
+    if let Err(e) = settings.set_strv("wallpaper-folders", strv) {
+        error!("Failed to save the wallpaper folders, {e}");
+    }
+    folders
+}
+
 fn create_image_grid_scrolled_window(image_grid: &GridView) -> ScrolledWindow {
     ScrolledWindow::builder()
         .child(image_grid)
@@ -686,8 +734,10 @@ fn connect_folder_path_buffer_signals(
     ),
     selected_sort_method: &str,
     sender_cache_images: Sender<CacheImageFile>,
+    settings: &Settings,
 ) {
     let selected_sort_method = selected_sort_method.to_string();
+    let settings = settings.clone();
     folder_path_buffer.connect_changed(clone!(
         #[weak]
         image_list_store,
@@ -701,6 +751,16 @@ fn connect_folder_path_buffer_signals(
         selected_sort_method,
         move |f| {
             let path = f.text(&f.start_iter(), &f.end_iter(), false).to_string();
+            // Picking a folder leaves the mixture, otherwise the chosen folder
+            // would be ignored.
+            if let Err(e) = settings.set_strv("wallpaper-folders", Vec::<&str>::new()) {
+                error!("Failed to leave the wallpaper folder mixture, {e}");
+            }
+            let path = if path.is_empty() {
+                Vec::new()
+            } else {
+                vec![PathBuf::from(path)]
+            };
             image_list_store.remove_all();
             let state = invert_sort_switch.state();
             let selected_sort_method = selected_sort_method.to_string();
