@@ -38,12 +38,20 @@ No option for scaling filter in *awww*. Supports each theme's color pallate
 
 ## Usage
 - Launch via terminal: `waytrogen`
+- Launch with a specific wallpaper folder: `waytrogen open /path/to/the/folder`
+  - The folder is canonicalized and stored as the current wallpaper folder
+  - Fails without launching the app when the path does not exist or is not a directory
+  - Options work before or after the subcommand, so `waytrogen open ~/Pictures --matugen` is valid
 - Restore previous wallpapers: `waytrogen --restore` or `waytrogen -r`
 - List current state in JSON: `waytrogen --list` or `waytrogen -l`
 - Use external script: `waytrogen --external_script` or `waytrogen -e`
   - Script receives: monitor, wallpaper path, complete state
   - Overrides `config.json` `executable_script` property. 
 - Cycle to the next wallpaper: `waytrogen --next` or `waytrogen -n` 
+- Generate a theme from the wallpaper before applying it: `waytrogen --matugen`
+  - Runs `matugen image <wallpaper> --source-color-index 0` with the path of the wallpaper being applied, then applies it
+  - Runs non interactively, so it never asks which source colour to pick
+  - Can be combined with `open`, `--next`, `--random` and `--restore`
 
 # License
 GPL-3.0-or-later

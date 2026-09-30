@@ -1,12 +1,13 @@
 use clap::Parser;
-use gtk::glib;
+use gtk::{gio::Settings, glib, prelude::*};
 use log::error;
 use std::{thread::sleep, time::Duration};
 use waytrogen::{
     cli::{
         cycle_next_wallpaper, delete_image_cache, launch_application, print_app_version,
-        print_wallpaper_state, restore_wallpapers, set_random_wallpapers, Cli,
+        print_wallpaper_state, resolve_open_folder, restore_wallpapers, set_random_wallpapers, Cli,
     },
+    common::APP_ID,
     dotfile::{self, get_config_file},
 };
 
@@ -40,12 +41,12 @@ fn main() -> glib::ExitCode {
 
     if args.restore {
         sleep(Duration::from_millis(args.startup_delay));
-        restore_wallpapers()
+        restore_wallpapers(&args)
     } else if args.list_current_wallpapers {
         print_wallpaper_state()
     } else if args.random {
         sleep(Duration::from_millis(args.startup_delay));
-        set_random_wallpapers()
+        set_random_wallpapers(&args)
     } else if args.version {
         print_app_version()
     } else if args.next.is_some() {
@@ -54,6 +55,21 @@ fn main() -> glib::ExitCode {
     } else if args.delete_cache {
         delete_image_cache()
     } else {
+        match resolve_open_folder(&args) {
+            Ok(Some(folder)) => {
+                if let Err(e) = Settings::new(APP_ID)
+                    .set_string("wallpaper-folder", folder.to_string_lossy().as_ref())
+                {
+                    error!("Failed to set wallpaper folder, {e}");
+                    return glib::ExitCode::FAILURE;
+                }
+            }
+            Ok(None) => {}
+            Err(e) => {
+                error!("{e}");
+                return glib::ExitCode::FAILURE;
+            }
+        }
         let _ = launch_application(args);
 
         let config_file = match dotfile::ConfigFile::from_gsettings() {

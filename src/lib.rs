@@ -5,5 +5,6 @@ pub mod database;
 pub mod dotfile;
 pub mod fs;
 pub mod main_window;
+pub mod matugen;
 pub mod ui_common;
 pub mod wallpaper_changers;

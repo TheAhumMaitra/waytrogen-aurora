@@ -9,7 +9,13 @@ use crate::{
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, path::PathBuf, process::Command, str::FromStr, thread};
+use std::{
+    fmt::Display,
+    path::PathBuf,
+    process::{Command, Stdio},
+    str::FromStr,
+    thread,
+};
 use strum::{IntoEnumIterator, VariantArray};
 use strum_macros::{EnumIter, IntoStaticStr, VariantArray};
 use which::which;
@@ -1077,6 +1083,8 @@ pub fn get_available_wallpaper_changers() -> Vec<WallpaperChangers> {
                         .arg("--user")
                         .arg("list-unit-files")
                         .arg("hyprpaper.service")
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
                         .spawn()
                         .unwrap()
                         .wait()

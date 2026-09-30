@@ -1,6 +1,7 @@
 use crate::{
     cli::Cli,
     common::{CacheImageFile, GtkPictureFile, Wallpaper, APP_ID, BUTTON_HEIGHT, BUTTON_WIDTH},
+    matugen::Matugen,
     ui_common::{
         add_escape_key_handler,
         change_image_button_handlers, compare_image_list_items_by_sort_selection_comparitor,
@@ -23,7 +24,10 @@ use gtk::{
     TextBuffer,
 };
 use log::{debug, trace};
-use std::{path::PathBuf, process::Command};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 #[derive(Clone)]
 struct SensitiveWidgetsHelper {
@@ -313,6 +317,7 @@ fn setup_image_signal_list_item_factory(
                         );
                         previous_wallpapers_text_buffer.set_text(&saved_wallpapers);
                         debug!("{}: {}", gettext("Stored Text"), saved_wallpapers);
+                        Matugen::new(args.matugen).generate(Path::new(&path));
                         selected_changer
                             .clone()
                             .change(PathBuf::from(&path.clone()), selected_monitor.clone());

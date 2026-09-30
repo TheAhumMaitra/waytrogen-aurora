@@ -89,8 +89,7 @@ button:checked {
     border-color: @active-accent;
 }
 
-button:disabled,
-button:insensitive {
+button:disabled {
     background-color: @surface;
     color: @muted;
     border-color: @border;

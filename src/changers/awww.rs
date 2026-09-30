@@ -15,8 +15,24 @@ use gtk::{
     Adjustment, Align, Box, Button, ColorDialog, ColorDialogButton, DropDown, Entry, Label,
     SpinButton, Switch, TextBuffer, Window,
 };
-use log::debug;
-use std::{path::PathBuf, process::Command};
+use log::{debug, error};
+use std::{
+    path::PathBuf,
+    process::{Command, Stdio},
+};
+
+/// `awww-daemon` aborts with "There is an awww-daemon instance already running
+/// on this socket!" when one is already up, and it outlives waytrogen, so only
+/// start a daemon when there is none.
+fn awww_daemon_is_running() -> bool {
+    Command::new("pgrep")
+        .arg("-x")
+        .arg("awww-daemon")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_or(false, |status| status.success())
+}
 
 pub fn change_awww_wallpaper(awww_changer: WallpaperChangers, image: PathBuf, monitor: String) {
     if let WallpaperChangers::Awww(
@@ -33,8 +49,18 @@ pub fn change_awww_wallpaper(awww_changer: WallpaperChangers, image: PathBuf, mo
         transition_wave,
     ) = awww_changer
     {
-        debug!("Starting awww daemon");
-        Command::new("awww-daemon").spawn().unwrap().wait().unwrap();
+        if !awww_daemon_is_running() {
+            debug!("Starting awww daemon");
+            if let Err(e) = Command::new("awww-daemon")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .and_then(|mut daemon| daemon.wait())
+            {
+                error!("Failed to start awww daemon, {e}");
+                return;
+            }
+        }
         let mut command = Command::new("awww");
         command
             .arg("img")
@@ -64,11 +90,10 @@ pub fn change_awww_wallpaper(awww_changer: WallpaperChangers, image: PathBuf, mo
             .arg(transition_bezier.to_string())
             .arg("--transition-wave")
             .arg(transition_wave.to_string())
-            .arg(image)
-            .spawn()
-            .unwrap()
-            .wait()
-            .unwrap();
+            .arg(image);
+        if let Err(e) = command.spawn().and_then(|mut awww| awww.wait()) {
+            error!("Failed to set wallpaper using awww, {e}");
+        }
     }
 }
 

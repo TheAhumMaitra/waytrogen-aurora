@@ -4,10 +4,11 @@ use crate::{
         CACHE_FILE_NAME, CONFIG_APP_NAME, GETTEXT_DOMAIN,
     },
     main_window::build_ui,
+    matugen::Matugen,
     ui_common::{gschema_string_to_string, string_to_gschema_string, SORT_DROPDOWN_STRINGS},
     wallpaper_changers::{WallpaperChanger, WallpaperChangers},
 };
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use gettextrs::{bind_textdomain_codeset, bindtextdomain, getters, gettext, textdomain};
 use gtk::{gio::Settings, glib, prelude::*, Application};
 use log::debug;
@@ -24,15 +25,17 @@ use std::{
 use log::{error, warn};
 
 #[must_use]
-pub fn restore_wallpapers() -> glib::ExitCode {
+pub fn restore_wallpapers(args: &Cli) -> glib::ExitCode {
     let settings = Settings::new(APP_ID);
     WallpaperChangers::killall_changers();
     let previous_wallpapers = serde_json::from_str::<Vec<Wallpaper>>(&gschema_string_to_string(
         settings.string("saved-wallpapers").as_ref(),
     ))
     .unwrap();
+    let mut matugen = Matugen::new(args.matugen);
     for wallpaper in previous_wallpapers {
         debug!("Restoring: {:?}", wallpaper);
+        matugen.generate(Path::new(&wallpaper.clone().path));
         wallpaper.clone().changer.change(
             PathBuf::from(wallpaper.clone().path),
             wallpaper.clone().monitor,
@@ -100,15 +103,17 @@ fn get_previous_supported_wallpapers(settings: &Settings) -> Vec<PathBuf> {
 }
 
 #[must_use]
-pub fn set_random_wallpapers() -> glib::ExitCode {
+pub fn set_random_wallpapers(args: &Cli) -> glib::ExitCode {
     let settings = Settings::new(APP_ID);
     let mut previous_wallpapers = get_previous_wallpapers(&settings);
     let files = get_previous_supported_wallpapers(&settings);
     WallpaperChangers::killall_changers();
+    let mut matugen = Matugen::new(args.matugen);
     for w in &mut previous_wallpapers {
         let mut rng = rand::thread_rng();
         let index = rng.gen_range(0..files.len());
         log::debug!("{index}");
+        matugen.generate(&files[index]);
         w.changer
             .clone()
             .change(files[index].clone(), w.monitor.clone());
@@ -140,6 +145,7 @@ pub fn cycle_next_wallpaper(args: &Cli) -> glib::ExitCode {
     let mut files = get_previous_supported_wallpapers(&settings);
     let invert_sort_state = settings.boolean("invert-sort");
     sort_by_sort_dropdown_string(&mut files, sort_dropdown_string, invert_sort_state);
+    let mut matugen = Matugen::new(args.matugen);
     if args.next.clone().unwrap_or_default() == "All" {
         for previous_wallpaper in &mut previous_wallpapers {
             let wallpaper_index = files.iter().position(|p| {
@@ -149,7 +155,7 @@ pub fn cycle_next_wallpaper(args: &Cli) -> glib::ExitCode {
                         .parse::<PathBuf>()
                         .unwrap_or_default()
             });
-            try_set_next_wallpaper(&files, wallpaper_index, previous_wallpaper);
+            try_set_next_wallpaper(&files, wallpaper_index, previous_wallpaper, &mut matugen);
         }
     } else {
         let previous_wallpaper = previous_wallpapers
@@ -172,6 +178,7 @@ pub fn cycle_next_wallpaper(args: &Cli) -> glib::ExitCode {
                     .unwrap_or_default()
             }),
             &mut previous_wallpaper,
+            &mut matugen,
         );
         let index = previous_wallpapers
             .iter()
@@ -195,9 +202,11 @@ fn try_set_next_wallpaper(
     files: &[PathBuf],
     position: Option<usize>,
     previous_wallpaper: &mut Wallpaper,
+    matugen: &mut Matugen,
 ) {
     if let Some(i) = position {
         let path = &files[(i + 1) % files.len()];
+        matugen.generate(path);
         previous_wallpaper
             .changer
             .clone()
@@ -214,6 +223,7 @@ fn try_set_next_wallpaper(
         );
         match files.first() {
             Some(p) => {
+                matugen.generate(p);
                 previous_wallpaper
                     .changer
                     .clone()
@@ -249,6 +259,22 @@ pub fn delete_image_cache() -> glib::ExitCode {
             error!("Failed to delete cache {e}");
             glib::ExitCode::FAILURE
         }
+    }
+}
+
+/// Resolves the folder given to `waytrogen open <PATH>` into an absolute path.
+/// `Ok(None)` means no folder was requested, `Err` explains why it is unusable.
+pub fn resolve_open_folder(args: &Cli) -> Result<Option<PathBuf>, String> {
+    let Some(Command::Open { path }) = args.command.clone() else {
+        return Ok(None);
+    };
+    match path.canonicalize() {
+        Ok(folder) if folder.is_dir() => {
+            debug!("Opening wallpaper folder {}", folder.display());
+            Ok(Some(folder))
+        }
+        Ok(folder) => Err(format!("{} is not a directory", folder.display())),
+        Err(e) => Err(format!("Failed to open {}: {e}", path.display())),
     }
 }
 
@@ -310,36 +336,53 @@ fn get_os_id() -> anyhow::Result<Option<String>> {
     Ok(None)
 }
 
+/// Subcommands of Waytrogen. Every other option is global, so it may be passed
+/// before or after the subcommand.
+#[derive(Subcommand, Clone)]
+pub enum Command {
+    /// Launch Waytrogen with a given wallpaper folder, e.g.
+    /// `waytrogen open ~/Pictures/wallpapers`.
+    Open {
+        /// Path to the wallpaper folder.
+        path: PathBuf,
+    },
+}
+
 #[derive(Parser, Clone)]
 pub struct Cli {
-    #[arg(short, long)]
+    #[command(subcommand)]
+    pub command: Option<Command>,
+    #[arg(short, long, global = true)]
     /// Restore previously set wallpapers.
     pub restore: bool,
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, global = true, default_value_t = 0)]
     /// How many error, warning, info, debug or trace logs will be shown. 0 for error, 1 for warning, 2 for info, 3 for debug, 4 or higher for trace.
     pub log_level: u8,
-    #[arg(short, long, default_value_t = false)]
+    #[arg(short, long, global = true, default_value_t = false)]
     /// Get the current wallpaper settings in JSON format.
     pub list_current_wallpapers: bool,
-    #[arg(short, long, value_parser = parse_executable_script)]
+    #[arg(short, long, global = true, value_parser = parse_executable_script)]
     /// Path to external script.
     pub external_script: Option<String>,
-    #[arg(long)]
+    #[arg(long, global = true)]
     /// Set random wallpapers based on last set changer.
     pub random: bool,
-    #[arg(short, long)]
+    #[arg(short, long, global = true)]
     /// Get application version.
     pub version: bool,
-    #[arg(short, long)]
+    #[arg(short, long, global = true)]
     /// Cycle wallaper(s) the next on based on the previously set wallpaper(s) and sort settings on a given monitor. "All" cycles wallpapers on all monitors.
     pub next: Option<String>,
-    #[arg(short, long, default_value_t = 0)]
+    #[arg(short, long, global = true, default_value_t = 0)]
     /// Startup delay to allow monitors to initialize.
     pub startup_delay: u64,
-    #[arg(short, long)]
+    #[arg(short, long, global = true)]
     /// Delete image cache.
     pub delete_cache: bool,
-    #[arg(short = 'b', long)]
+    #[arg(short = 'b', long, global = true)]
     /// Hide bottom bar
     pub hide_bottom_bar: Option<bool>,
+    #[arg(long, global = true)]
+    /// Run `matugen image <wallpaper>` before applying the wallpaper(s). Launches the app when used on its own.
+    pub matugen: bool,
 }
