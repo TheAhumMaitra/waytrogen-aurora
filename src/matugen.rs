@@ -1,8 +1,16 @@
 use log::{debug, error};
 use std::{
     collections::HashSet,
+    ffi::OsString,
+    io::{BufRead, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, Command, Stdio},
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        Arc, Mutex,
+    },
+    thread,
+    time::Duration,
 };
 
 /// Index of the colour matugen should extract from the image, `0` being the most
@@ -10,269 +18,373 @@ use std::{
 /// "Select the color you want to use as source color" prompt.
 const SOURCE_COLOR_INDEX: &str = "0";
 
-/// Highest index matugen accepts for `--source-color-index`.
-#[cfg(test)]
-const SOURCE_COLOR_INDEX_MAX: u8 = 4;
+/// Material You scheme. The default `scheme-tonal-spot` washes the palette out
+/// towards the wallpaper's own colours, which is what made waybar and the other
+/// bars turn sky blue; `scheme-vibrant` keeps the hues bold instead.
+const SCHEME: &str = "scheme-vibrant";
 
-#[derive(Default)]
+/// How often the worker checks whether a run finished or a newer wallpaper
+/// arrived.
+const WORKER_POLL: Duration = Duration::from_millis(100);
+
+/// Tracks which images matugen already handled, so several monitors using the
+/// same wallpaper only trigger one run. Clones share the state.
+#[derive(Default, Clone)]
 pub struct Matugen {
-    enabled: bool,
-    generated_images: HashSet<PathBuf>,
+    /// `None` when matugen is disabled, so nothing is ever started.
+    generated_images: Option<Arc<Mutex<HashSet<PathBuf>>>>,
 }
 
 impl Matugen {
     #[must_use]
     pub fn new(enabled: bool) -> Self {
         Self {
-            enabled,
-            generated_images: HashSet::new(),
+            generated_images: enabled.then(|| Arc::new(Mutex::new(HashSet::new()))),
         }
     }
 
-    /// Runs `matugen image <image> --source-color-index 0` unless matugen is
-    /// disabled or the same image has already been generated with this instance.
-    /// Returns whether matugen succeeded.
-    pub fn generate(&mut self, image: &Path) -> bool {
+    /// Runs `matugen image <image>` and reports whether it succeeded, unless
+    /// matugen is disabled or the same image was already handled.
+    pub fn generate(&self, image: &Path) -> bool {
         if !self.take_image(image) {
             return false;
         }
-        debug!("Running matugen on {}", image.display());
-        match matugen_command(image)
-            // Never let matugen block waiting for the source colour picker.
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .status()
-        {
-            Ok(status) if status.success() => {
-                debug!("matugen finished successfully");
-                true
-            }
-            Ok(status) => {
-                error!("matugen exited with {status}");
-                false
-            }
-            Err(e) => {
-                error!("Failed to run matugen, {e}");
-                false
-            }
-        }
+        run_matugen(image).unwrap_or_default()
     }
 
     /// Registers `image` as handled and reports whether matugen still has to run
-    /// for it. Empty paths come from wallpapers saved before the folder was known,
-    /// so they are skipped without running matugen.
-    fn take_image(&mut self, image: &Path) -> bool {
+    /// for it. Empty paths come from wallpapers saved before the folder was
+    /// known, so they are skipped without running matugen.
+    pub fn take_image(&self, image: &Path) -> bool {
         if image.as_os_str().is_empty() {
             debug!("Skipping matugen for a wallpaper without a path");
             return false;
         }
-        self.enabled && self.generated_images.insert(image.to_path_buf())
+        if self.generated_images.is_none() {
+            return false;
+        }
+        if let Err(e) = check_image(image) {
+            error!("Skipping matugen for {image:?}, {e}");
+            return false;
+        }
+        lock(self.generated_images.as_ref().expect("just checked")).insert(image.to_path_buf())
     }
+}
+
+/// Runs matugen in the background for a window: the wallpaper is applied right
+/// away and a run that a newer wallpaper made pointless is dropped, so the theme
+/// files always end up matching the last wallpaper that was picked.
+#[derive(Clone)]
+pub struct MatugenWorker {
+    requests: Sender<PathBuf>,
+}
+
+impl MatugenWorker {
+    #[must_use]
+    pub fn spawn() -> Self {
+        let (requests, receiver) = mpsc::channel::<PathBuf>();
+        thread::spawn(move || run_requests(receiver));
+        Self { requests }
+    }
+
+    /// Queues `image`. The worker only ever runs the newest wallpaper, so
+    /// clicking through a gallery quickly does not leave matugen behind.
+    pub fn submit(&self, image: &Path) {
+        if let Err(e) = self.requests.send(image.to_path_buf()) {
+            error!("The matugen worker is gone, {e}");
+        }
+    }
+}
+
+/// Themes `images`, one after the other. Used by the detached worker process, so
+/// a one shot command can exit without waiting several seconds for matugen.
+#[must_use]
+pub fn theme_images(images: &[PathBuf]) -> bool {
+    let matugen = Matugen::new(true);
+    let mut succeeded = true;
+    for image in images {
+        succeeded &= matugen.generate(image);
+    }
+    succeeded
+}
+
+/// The detached worker: reads one image path per line from stdin, themes each
+/// one and exits. `waytrogen` hands the paths over through a pipe and returns.
+#[must_use]
+pub fn run_theme_worker() -> bool {
+    let stdin = std::io::stdin();
+    let images: Vec<PathBuf> = stdin
+        .lock()
+        .lines()
+        .map_while(std::result::Result::ok)
+        .filter(|line| !line.trim().is_empty())
+        .map(PathBuf::from)
+        .collect();
+    debug!("Matugen worker received {} image(s)", images.len());
+    for image in &images {
+        debug!("Matugen worker got {image:?}");
+    }
+    theme_images(&images)
+}
+
+/// Hands the newest of `images` to the detached worker. matugen writes a single
+/// theme for the whole session, so theming several wallpapers of a multi monitor
+/// command would only end up throwing all but the last one away.
+pub fn theme_latest_in_background(images: &[PathBuf]) {
+    if let Some(latest) = images.last() {
+        theme_images_in_background(std::slice::from_ref(latest));
+    }
+}
+
+/// Starts the detached worker for `images` without waiting for it, so a one shot
+/// command returns immediately while matugen writes the theme files.
+pub fn theme_images_in_background(images: &[PathBuf]) {
+    if images.is_empty() {
+        return;
+    }
+    let exe = match std::env::current_exe() {
+        Ok(exe) => exe,
+        Err(e) => {
+            error!("Failed to find the waytrogen binary for matugen, {e}");
+            return;
+        }
+    };
+    let child = Command::new(exe)
+        .arg("--matugen-worker")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit())
+        .spawn();
+    let mut child = match child {
+        Ok(child) => child,
+        Err(e) => {
+            error!("Failed to start the matugen worker, {e}");
+            return;
+        }
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        for image in images {
+            if let Err(e) = writeln!(stdin, "{}", image.display()) {
+                error!("Failed to hand {image:?} to the matugen worker, {e}");
+                return;
+            }
+        }
+    }
+    debug!("Started the matugen worker for {images:?}");
+    // The worker keeps running after this process exits; its stdin closes when
+    // the pipe above is dropped.
+    drop(child);
+}
+
+/// Runs the queued images, killing the previous run as soon as a newer one
+/// arrives so that two matugen processes never write the same theme file at once.
+fn run_requests(receiver: Receiver<PathBuf>) {
+    let mut running: Option<Child> = None;
+    loop {
+        match receiver.recv_timeout(WORKER_POLL) {
+            Ok(mut image) => {
+                // Anything queued while we were waiting is outdated.
+                while let Ok(newer) = receiver.try_recv() {
+                    image = newer;
+                }
+                stop(&mut running);
+                debug!("Running matugen on {}", image.display());
+                match matugen_command(&image)
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .spawn()
+                {
+                    Ok(child) => running = Some(child),
+                    Err(e) => error!("Failed to run matugen, {e}"),
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                if running
+                    .as_mut()
+                    .is_some_and(|child| matches!(child.try_wait(), Ok(Some(_))))
+                {
+                    debug!("matugen finished successfully");
+                    running = None;
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+    }
+    stop(&mut running);
+}
+
+/// Kills a running matugen, together with the app reloads it may have started.
+fn stop(running: &mut Option<Child>) {
+    let Some(mut child) = running.take() else {
+        return;
+    };
+    debug!("Dropping the matugen run of a newer wallpaper");
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Runs matugen and reports whether it succeeded, `None` when it could not run.
+fn run_matugen(image: &Path) -> Option<bool> {
+    if let Err(e) = check_image(image) {
+        error!("Skipping matugen for {image:?}, {e}");
+        return Some(false);
+    }
+    debug!(
+        "Running matugen on {} ({} KiB)",
+        image.display(),
+        std::fs::metadata(image).map_or(0, |metadata| metadata.len()) / 1024
+    );
+    let mut command = matugen_command(image);
+    debug!("Running {command:?}");
+    match command
+        // Never let matugen block waiting for the source colour picker.
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .status()
+    {
+        Ok(status) if status.success() => {
+            debug!("matugen finished successfully");
+            Some(true)
+        }
+        Ok(status) => {
+            error!("matugen exited with {status}");
+            Some(false)
+        }
+        Err(e) => {
+            error!("Failed to run matugen, {e}");
+            None
+        }
+    }
+}
+
+/// Checks matugen can be pointed at `image` and logs what it will find.
+fn check_image(image: &Path) -> Result<(), String> {
+    let metadata =
+        std::fs::metadata(image).map_err(|e| format!("the image cannot be read, {e}"))?;
+    if !metadata.is_file() {
+        return Err("the path is not a file".to_owned());
+    }
+    if metadata.len() == 0 {
+        return Err("the image is empty".to_owned());
+    }
+    Ok(())
+}
+
+/// Locks a mutex, recovering from a panic in another thread.
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Builds the matugen invocation used to theme from `image`. Kept separate from
 /// the IO of [`Matugen::generate`] so tests can inspect and extend it.
 fn matugen_command(image: &Path) -> Command {
     let mut command = Command::new("matugen");
+    command.args(matugen_args(image));
     command
-        .arg("image")
-        .arg(image)
-        .arg("--source-color-index")
-        .arg(SOURCE_COLOR_INDEX);
-    command
+}
+
+/// The arguments matugen is themed with, kept separate from the process so tests
+/// can check them without running it.
+fn matugen_args(image: &Path) -> Vec<OsString> {
+    vec![
+        "image".into(),
+        image.into(),
+        "--source-color-index".into(),
+        SOURCE_COLOR_INDEX.into(),
+        "--type".into(),
+        SCHEME.into(),
+    ]
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
 
-    /// Creates a self cleaning temporary directory.
-    struct TempDir(PathBuf);
-
-    impl TempDir {
-        fn new(name: &str) -> Self {
-            let path =
-                std::env::temp_dir().join(format!("waytrogen-{name}-{}", uuid::Uuid::new_v4()));
-            fs::create_dir_all(&path).expect("Failed to create temporary directory");
-            Self(path)
-        }
-
-        fn path(&self) -> &Path {
-            &self.0
-        }
+    /// Creates a wallpaper matugen can actually be pointed at, and returns its
+    /// path. The images are never decoded, so any readable file will do.
+    fn wallpaper(name: &str) -> PathBuf {
+        let folder = std::env::temp_dir().join("waytrogen-matugen-tests");
+        std::fs::create_dir_all(&folder).expect("test folder");
+        let path = folder.join(name);
+        std::fs::write(&path, b"not a real image").expect("test wallpaper");
+        path
     }
 
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    /// Writes a solid colour image matugen can read.
-    fn write_test_image(path: &Path) {
-        image::RgbImage::from_pixel(64, 64, image::Rgb([26, 188, 156]))
-            .save(path)
-            .expect("Failed to write test image");
-    }
-
-    fn args_of(command: &Command) -> Vec<String> {
-        command
-            .get_args()
+    /// The arguments matugen would be run with.
+    fn args(image: &Path) -> Vec<String> {
+        matugen_args(image)
+            .iter()
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect()
     }
 
-    fn matugen_is_installed() -> bool {
-        Command::new("matugen")
-            .arg("--version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok()
-    }
-
-    /// Runs matugen on a freshly written image and returns its parsed `--json hex`
-    /// output, or `None` when matugen is not installed.
-    ///
-    /// `--dry-run` still renders templates, so the child's config directories are
-    /// pointed at a temporary directory to keep the real theme files untouched.
-    fn run_matugen(image: &Path, home: &Path) -> Option<serde_json::Value> {
-        if !matugen_is_installed() {
-            eprintln!("Skipping, matugen is not installed");
-            return None;
-        }
-        let output = matugen_command(image)
-            .args(["--dry-run", "--json", "hex"])
-            .env("HOME", home)
-            .env("XDG_CONFIG_HOME", home.join("config"))
-            .env("XDG_CACHE_HOME", home.join("cache"))
-            // A prompt would read stdin, and with none available matugen would
-            // fail instead of exiting successfully.
-            .stdin(Stdio::null())
-            .output()
-            .expect("Failed to run matugen");
-        assert!(
-            output.status.success(),
-            "matugen exited with {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        );
-        Some(serde_json::from_slice(&output.stdout).expect("matugen did not return JSON"))
-    }
-
-    /// Pulls a colour out of matugen's JSON, which is either a plain hex string or
-    /// an object holding a `dark`, `default` and `light` variant.
-    fn color_of(json: &serde_json::Value, name: &str) -> Option<String> {
-        let color = json.get("colors")?.get(name)?;
-        match color {
-            serde_json::Value::String(hex) => Some(hex.clone()),
-            serde_json::Value::Object(variants) => variants
-                .get("dark")
-                .or_else(|| variants.get("default"))
-                .and_then(|variant| variant.get("color"))
-                .and_then(serde_json::Value::as_str)
-                .map(ToOwned::to_owned),
-            _ => None,
-        }
-    }
-
     #[test]
-    fn command_picks_the_dominant_colour_without_prompting() {
-        let args = args_of(&matugen_command(Path::new("/tmp/wall.png")));
-        assert_eq!(
-            args,
-            vec!["image", "/tmp/wall.png", "--source-color-index", "0"]
-        );
-    }
-
-    #[test]
-    fn command_always_passes_a_source_colour_index() {
-        let index: u8 = SOURCE_COLOR_INDEX
-            .parse()
-            .expect("Source colour index should be a number");
-        assert!(index <= SOURCE_COLOR_INDEX_MAX);
-        assert!(matugen_command(Path::new("wall.png"))
-            .get_args()
-            .collect::<Vec<_>>()
-            .windows(2)
-            .any(|pair| pair[0] == "--source-color-index" && pair[1] == SOURCE_COLOR_INDEX));
-    }
-
-    #[test]
-    fn command_keeps_the_image_as_its_own_argument() {
-        let args = args_of(&matugen_command(Path::new("/tmp/a folder/wall.png")));
+    fn command_themes_the_wallpaper_without_prompting() {
+        let image = Path::new("/tmp/waytrogen/matugen/test.png");
+        let args = args(image);
         assert_eq!(args[0], "image");
-        assert_eq!(args[1], "/tmp/a folder/wall.png");
+        assert_eq!(args[1], image.to_str().unwrap());
+        // Without the index matugen opens its interactive colour picker and waits.
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["--source-color-index", "0"]));
+        // The default scheme washed the colours out towards the wallpaper's own.
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["--type", "scheme-vibrant"]));
     }
 
     #[test]
-    fn a_disabled_matugen_never_takes_an_image() {
-        let mut matugen = Matugen::new(false);
-        assert!(!matugen.take_image(Path::new("/tmp/wall.png")));
-        assert!(!matugen.take_image(Path::new("/tmp/wall.png")));
+    fn generating_only_runs_once_per_image() {
+        let image = wallpaper("once.png");
+        let matugen = Matugen::new(true);
+        // Clones share the state, so several monitors cannot theme the same image
+        // twice or out of order.
+        let clone = matugen.clone();
+        assert!(matugen.take_image(&image));
+        assert!(!clone.take_image(&image));
+        assert!(!matugen.take_image(&image));
     }
 
     #[test]
-    fn an_image_is_only_taken_once() {
-        let mut matugen = Matugen::new(true);
-        assert!(matugen.take_image(Path::new("/tmp/wall.png")));
-        assert!(!matugen.take_image(Path::new("/tmp/wall.png")));
-        assert!(matugen.take_image(Path::new("/tmp/other.png")));
-        assert!(!matugen.take_image(Path::new("/tmp/other.png")));
+    fn different_images_are_all_queued() {
+        let matugen = Matugen::new(true);
+        let first = wallpaper("first.png");
+        let second = wallpaper("second.png");
+        assert!(matugen.take_image(&first));
+        assert!(matugen.take_image(&second));
     }
 
     #[test]
-    fn generate_does_nothing_when_disabled() {
-        assert!(!Matugen::new(false).generate(Path::new("/tmp/wall.png")));
+    fn generating_is_skipped_when_disabled() {
+        let image = wallpaper("disabled.png");
+        assert!(!Matugen::new(false).take_image(&image));
     }
 
     #[test]
-    fn a_wallpaper_without_a_path_is_skipped_quietly() {
-        // Saved wallpapers from before the folder was known have no path, and
-        // running matugen on one only produces an error.
-        assert!(!Matugen::new(true).generate(Path::new("")));
+    fn wallpapers_without_a_path_are_skipped() {
+        // Saved wallpapers can predate the folder they were picked from.
+        let matugen = Matugen::new(true);
+        assert!(!matugen.take_image(Path::new("")));
     }
 
     #[test]
-    fn generate_fails_loudly_on_an_unreadable_image() {
-        let dir = TempDir::new("matugen-missing");
-        let missing = dir.path().join("does-not-exist.png");
-        assert!(!Matugen::new(true).generate(&missing));
+    fn wallpapers_that_cannot_be_read_are_skipped() {
+        let matugen = Matugen::new(true);
+        assert!(!matugen.take_image(Path::new("/tmp/waytrogen/matugen/missing.png")));
+        assert!(!matugen.take_image(Path::new("/tmp/waytrogen/matugen")));
+        // An empty file would only make matugen fail after it started.
+        let empty = std::env::temp_dir().join("waytrogen-matugen-tests/empty.png");
+        std::fs::write(&empty, b"").expect("empty wallpaper");
+        assert!(!matugen.take_image(&empty));
     }
 
     #[test]
-    fn matugen_generates_colors_without_user_input() {
-        let dir = TempDir::new("matugen-colors");
-        let image = dir.path().join("wall.png");
-        write_test_image(&image);
-        let Some(json) = run_matugen(&image, dir.path()) else {
-            return;
-        };
-        assert_eq!(
-            color_of(&json, "source_color").as_deref(),
-            Some("#1abc9c"),
-            "matugen did not extract the dominant colour"
-        );
-        for name in ["primary", "secondary", "tertiary", "background", "surface"] {
-            assert!(
-                color_of(&json, name).is_some(),
-                "matugen did not generate {name}"
-            );
-        }
-    }
-
-    #[test]
-    fn matugen_leaves_the_users_config_alone() {
-        let dir = TempDir::new("matugen-isolation");
-        let image = dir.path().join("wall.png");
-        write_test_image(&image);
-        if run_matugen(&image, dir.path()).is_none() {
-            return;
-        }
-        assert!(
-            !dir.path().join("config/matugen/config.toml").exists(),
-            "matugen created a config inside the temporary directory, so it is not isolated"
-        );
+    fn theming_no_images_does_nothing() {
+        // A command that changed no wallpaper must not start a worker.
+        theme_images_in_background(&[]);
+        assert!(theme_images(&[]));
     }
 }

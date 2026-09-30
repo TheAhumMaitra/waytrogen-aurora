@@ -1,11 +1,11 @@
 use crate::{
     cli::Cli,
     common::{CacheImageFile, GtkPictureFile, Wallpaper, APP_ID, BUTTON_HEIGHT, BUTTON_WIDTH},
-    matugen::Matugen,
+    matugen::MatugenWorker,
     ui_common::{
-        add_escape_key_handler,
-        change_image_button_handlers, compare_image_list_items_by_sort_selection_comparitor,
-        generate_changer_bar, generate_image_files, get_available_monitors, get_selected_changer,
+        add_escape_key_handler, change_image_button_handlers,
+        compare_image_list_items_by_sort_selection_comparitor, generate_changer_bar,
+        generate_image_files, get_available_monitors, get_selected_changer,
         gschema_string_to_string, hide_unsupported_files, sort_images, string_to_gschema_string,
         DEFAULT_MARGIN, SORT_DROPDOWN_STRINGS,
     },
@@ -20,8 +20,8 @@ use gtk::{
     prelude::*,
     Align, Application, ApplicationWindow, Box, Button, CssProvider, DropDown, Entry, FileDialog,
     GridView, Label, ListItem, ListScrollFlags, MenuButton, Orientation, Picture, Popover,
-    ProgressBar, ScrolledWindow, SignalListItemFactory, SingleSelection, StringObject, Switch, Text,
-    TextBuffer,
+    ProgressBar, ScrolledWindow, SignalListItemFactory, SingleSelection, StringObject, Switch,
+    Text, TextBuffer,
 };
 use log::{debug, error, trace};
 use std::{
@@ -228,10 +228,18 @@ fn setup_image_signal_list_item_factory(
     settings
         .bind("saved-wallpapers", &previous_wallpapers_text_buffer, "text")
         .build();
+    // Runs matugen off the UI thread and drops runs a newer wallpaper replaced.
+    let matugen = if args.matugen {
+        Some(MatugenWorker::spawn())
+    } else {
+        None
+    };
     let factory = SignalListItemFactory::new();
 
     // SETUP: This runs once per VISIBLE slot (reused for all items)
     factory.connect_setup(clone!(
+        #[strong]
+        matugen,
         #[weak]
         monitors_dropdown,
         #[weak]
@@ -253,7 +261,10 @@ fn setup_image_signal_list_item_factory(
             // By connecting here, we avoid signal accumulation.
             // list_item.item() dynamically points to the data currently in this slot.
             let args = args.clone();
+            let matugen = matugen.clone();
             button.connect_clicked(clone!(
+                #[strong]
+                matugen,
                 #[weak]
                 list_item,
                 #[weak]
@@ -318,7 +329,10 @@ fn setup_image_signal_list_item_factory(
                         );
                         previous_wallpapers_text_buffer.set_text(&saved_wallpapers);
                         debug!("{}: {}", gettext("Stored Text"), saved_wallpapers);
-                        Matugen::new(args.matugen).generate(Path::new(&path));
+                        // Runs in the background, matugen takes seconds.
+                        if let Some(matugen) = matugen.as_ref() {
+                            matugen.submit(Path::new(&path));
+                        }
                         selected_changer
                             .clone()
                             .change(PathBuf::from(&path.clone()), selected_monitor.clone());
@@ -345,7 +359,11 @@ fn setup_image_signal_list_item_factory(
         // Sync visual state: If the texture is loaded, show it.
         let texture_ref = data.get_picture();
         let texture_ref = texture_ref.borrow();
-        trace!("Bind: image='{}' texture_present={}", data.cache_image_file().borrow().path, texture_ref.is_some());
+        trace!(
+            "Bind: image='{}' texture_present={}",
+            data.cache_image_file().borrow().path,
+            texture_ref.is_some()
+        );
         picture.set_paintable(texture_ref.as_ref());
     });
 
@@ -944,13 +962,16 @@ fn create_application_window(app: &Application) -> ApplicationWindow {
         .application(app)
         .title("Watering")
         .build();
-    add_escape_key_handler(&window, clone!(
-        #[weak]
-        app,
-        move || {
-            app.quit();
-        }
-    ));
+    add_escape_key_handler(
+        &window,
+        clone!(
+            #[weak]
+            app,
+            move || {
+                app.quit();
+            }
+        ),
+    );
 
     window.set_default_size(1024, 600);
     window.present();

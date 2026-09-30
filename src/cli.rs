@@ -4,7 +4,7 @@ use crate::{
         CACHE_FILE_NAME, CONFIG_APP_NAME, GETTEXT_DOMAIN,
     },
     main_window::{build_ui, stored_mixture_folders},
-    matugen::Matugen,
+    matugen::{theme_latest_in_background, Matugen},
     ui_common::{gschema_string_to_string, string_to_gschema_string, SORT_DROPDOWN_STRINGS},
     wallpaper_changers::{WallpaperChanger, WallpaperChangers},
 };
@@ -32,10 +32,13 @@ pub fn restore_wallpapers(args: &Cli) -> glib::ExitCode {
         settings.string("saved-wallpapers").as_ref(),
     ))
     .unwrap();
-    let mut matugen = Matugen::new(args.matugen);
+    let matugen = Matugen::new(args.matugen);
+    let mut themed: Vec<PathBuf> = Vec::new();
     for wallpaper in previous_wallpapers {
         debug!("Restoring: {:?}", wallpaper);
-        matugen.generate(Path::new(&wallpaper.clone().path));
+        if matugen.take_image(Path::new(&wallpaper.clone().path)) {
+            themed.push(PathBuf::from(wallpaper.clone().path));
+        }
         wallpaper.clone().changer.change(
             PathBuf::from(wallpaper.clone().path),
             wallpaper.clone().monitor,
@@ -50,6 +53,7 @@ pub fn restore_wallpapers(args: &Cli) -> glib::ExitCode {
             | WallpaperChangers::GSlapper(_, _, _, _) => {}
         }
     }
+    theme_latest_in_background(&themed);
     glib::ExitCode::SUCCESS
 }
 
@@ -116,12 +120,15 @@ pub fn set_random_wallpapers(args: &Cli) -> glib::ExitCode {
     let mut previous_wallpapers = get_previous_wallpapers(&settings);
     let files = get_previous_supported_wallpapers(&settings);
     WallpaperChangers::killall_changers();
-    let mut matugen = Matugen::new(args.matugen);
+    let matugen = Matugen::new(args.matugen);
+    let mut themed: Vec<PathBuf> = Vec::new();
     for w in &mut previous_wallpapers {
         let mut rng = rand::thread_rng();
         let index = rng.gen_range(0..files.len());
         log::debug!("{index}");
-        matugen.generate(&files[index]);
+        if matugen.take_image(&files[index]) {
+            themed.push(files[index].clone());
+        }
         w.changer
             .clone()
             .change(files[index].clone(), w.monitor.clone());
@@ -136,6 +143,7 @@ pub fn set_random_wallpapers(args: &Cli) -> glib::ExitCode {
             error!("{} {e}", gettext("Unable to save \"next\" wallpapers"));
         }
     }
+    theme_latest_in_background(&themed);
     glib::ExitCode::SUCCESS
 }
 
@@ -153,7 +161,8 @@ pub fn cycle_next_wallpaper(args: &Cli) -> glib::ExitCode {
     let mut files = get_previous_supported_wallpapers(&settings);
     let invert_sort_state = settings.boolean("invert-sort");
     sort_by_sort_dropdown_string(&mut files, sort_dropdown_string, invert_sort_state);
-    let mut matugen = Matugen::new(args.matugen);
+    let matugen = Matugen::new(args.matugen);
+    let mut themed: Vec<PathBuf> = Vec::new();
     if args.next.clone().unwrap_or_default() == "All" {
         for previous_wallpaper in &mut previous_wallpapers {
             let wallpaper_index = files.iter().position(|p| {
@@ -163,7 +172,13 @@ pub fn cycle_next_wallpaper(args: &Cli) -> glib::ExitCode {
                         .parse::<PathBuf>()
                         .unwrap_or_default()
             });
-            try_set_next_wallpaper(&files, wallpaper_index, previous_wallpaper, &mut matugen);
+            try_set_next_wallpaper(
+                &files,
+                wallpaper_index,
+                previous_wallpaper,
+                &matugen,
+                &mut themed,
+            );
         }
     } else {
         let previous_wallpaper = previous_wallpapers
@@ -186,7 +201,8 @@ pub fn cycle_next_wallpaper(args: &Cli) -> glib::ExitCode {
                     .unwrap_or_default()
             }),
             &mut previous_wallpaper,
-            &mut matugen,
+            &matugen,
+            &mut themed,
         );
         let index = previous_wallpapers
             .iter()
@@ -203,6 +219,7 @@ pub fn cycle_next_wallpaper(args: &Cli) -> glib::ExitCode {
             error!("{} {e}", gettext("Unable to save \"next\" wallpapers"));
         }
     }
+    theme_latest_in_background(&themed);
     glib::ExitCode::SUCCESS
 }
 
@@ -210,11 +227,14 @@ fn try_set_next_wallpaper(
     files: &[PathBuf],
     position: Option<usize>,
     previous_wallpaper: &mut Wallpaper,
-    matugen: &mut Matugen,
+    matugen: &Matugen,
+    themed: &mut Vec<PathBuf>,
 ) {
     if let Some(i) = position {
         let path = &files[(i + 1) % files.len()];
-        matugen.generate(path);
+        if matugen.take_image(path) {
+            themed.push(path.clone());
+        }
         previous_wallpaper
             .changer
             .clone()
@@ -231,7 +251,9 @@ fn try_set_next_wallpaper(
         );
         match files.first() {
             Some(p) => {
-                matugen.generate(p);
+                if matugen.take_image(p) {
+                    themed.push(p.clone());
+                }
                 previous_wallpaper
                     .changer
                     .clone()
@@ -397,6 +419,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     /// Run `matugen image <wallpaper>` before applying the wallpaper(s). Launches the app when used on its own.
     pub matugen: bool,
+    /// Internal: themes the images read from stdin, one path per line. Started by
+    /// waytrogen itself so it can exit before matugen finishes.
+    #[arg(long, hide = true)]
+    pub matugen_worker: bool,
 }
 
 #[cfg(test)]

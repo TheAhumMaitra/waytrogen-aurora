@@ -1,10 +1,7 @@
 use crate::{
     common::RGB,
     ui_common::{add_escape_key_handler, DEFAULT_MARGIN},
-    wallpaper_changers::{
-        AWWWTransitionBezier, AWWWTransitionPosition,
-        WallpaperChangers,
-    },
+    wallpaper_changers::{AWWWTransitionBezier, AWWWTransitionPosition, WallpaperChangers},
 };
 use gettextrs::gettext;
 use gtk::{
@@ -144,13 +141,16 @@ pub fn generate_awww_changer_bar(changer_specific_options_box: &Box, settings: S
         .title(gettext("AWWW Advanced Image Settings"))
         .hide_on_close(true)
         .build();
-    add_escape_key_handler(&advanced_settings_window, clone!(
-        #[weak]
-        advanced_settings_window,
-        move || {
-            advanced_settings_window.set_visible(false);
-        }
-    ));
+    add_escape_key_handler(
+        &advanced_settings_window,
+        clone!(
+            #[weak]
+            advanced_settings_window,
+            move || {
+                advanced_settings_window.set_visible(false);
+            }
+        ),
+    );
     let advanced_settings_button = Button::builder()
         .margin_top(DEFAULT_MARGIN)
         .margin_start(DEFAULT_MARGIN)
@@ -185,7 +185,7 @@ fn connect_advanced_settings_window_signals(
             .build();
         advanced_settings_window.present();
         advanced_settings_window.set_child(Some(&advanced_settings_window_box));
-      
+
         let transition_step_label = create_label("Transition step");
 
         let transition_step_adjustment =

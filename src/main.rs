@@ -16,11 +16,23 @@ use waytrogen::{
 
 fn main() -> glib::ExitCode {
     let mut args = Cli::parse();
+
     stderrlog::new()
         .module(module_path!())
         .verbosity(args.log_level as usize)
         .init()
         .unwrap();
+
+    // Detached matugen worker: it only themes what the parent handed over, so it
+    // skips the whole startup and never opens a window. It runs after the logger
+    // so matugen failures are still reported.
+    if args.matugen_worker {
+        return if waytrogen::matugen::run_theme_worker() {
+            glib::ExitCode::SUCCESS
+        } else {
+            glib::ExitCode::FAILURE
+        };
+    }
 
     let config_file = match get_config_file() {
         Ok(c) => c,
