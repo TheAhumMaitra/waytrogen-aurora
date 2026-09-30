@@ -82,20 +82,25 @@ fn pictures_dir_in(home: &Path, config: &Path) -> PathBuf {
     };
     dirs.lines()
         .find_map(|line| line.trim().strip_prefix("XDG_PICTURES_DIR="))
-        .map(|value| value.trim().trim_matches('"').replace("$HOME", &home.to_string_lossy()))
+        .map(|value| {
+            value
+                .trim()
+                .trim_matches('"')
+                .replace("$HOME", &home.to_string_lossy())
+        })
         .filter(|value| !value.is_empty())
         .map_or_else(fallback, PathBuf::from)
 }
 
 fn config_dir() -> PathBuf {
-    xdg::BaseDirectories::with_prefix("")
-        .map_or_else(
-            |_| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".config"),
-            |dirs| dirs.get_config_home(),
-        )
+    xdg::BaseDirectories::with_prefix("").map_or_else(
+        |_| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".config"),
+        |dirs| dirs.get_config_home(),
+    )
 }
 
-/// Immediate subdirectories of `path`, sorted by name.
+/// Immediate subdirectories of `path`, sorted by name. Hidden folders such as
+/// `.git` are skipped.
 fn subfolders(path: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(path) else {
         return Vec::new();
@@ -103,7 +108,12 @@ fn subfolders(path: &Path) -> Vec<PathBuf> {
     let mut folders: Vec<PathBuf> = entries
         .filter_map(std::result::Result::ok)
         .map(|entry| entry.path())
-        .filter(|entry| entry.is_dir())
+        .filter(|entry| {
+            entry.is_dir()
+                && entry
+                    .file_name()
+                    .is_some_and(|name| !name.to_string_lossy().starts_with('.'))
+        })
         .collect();
     folders.sort();
     folders
@@ -154,9 +164,11 @@ mod tests {
         let dir = TempDir::new("fs-multi-root");
         let first = dir.dir("first");
         let second = dir.dir("second");
+        dir.dir("second/nested");
         let a = dir.file("first/a.png");
         let b = dir.file("second/nested/b.jpg");
-        dir.file("second/notes.txt");
+        // mpvpaper can play videos, but text files are not wallpapers.
+        dir.file("second/notes.rst");
 
         let files = get_image_files(
             &[first, second, dir.path().join("missing")],
@@ -175,11 +187,7 @@ mod tests {
         let root = dir.dir("themes");
         let wallpaper = dir.file("themes/Dracula/backgrounds/wall.png");
 
-        let files = get_image_files(
-            &[theme, root],
-            SORT_DROPDOWN_STRINGS[1],
-            false,
-        );
+        let files = get_image_files(&[theme, root], SORT_DROPDOWN_STRINGS[1], false);
 
         assert_eq!(files, vec![wallpaper]);
     }
@@ -189,11 +197,10 @@ mod tests {
         let dir = TempDir::new("fs-mixture");
         let themes = dir.dir("themes");
         let dracula = themes.join("Dracula");
-        let _backgrounds = dracula.join("backgrounds");
-        let _waybar = dracula.join("waybar");
-        std::fs::create_dir_all(diracula.join("backgrounds/nested")).expect("Failed to create dir");
-        let _catppuccin = themes.join("Catppuccin");
-        let _rofi = catppuccin.join("rofi");
+        let catppuccin = themes.join("Catppuccin");
+        std::fs::create_dir_all(dracula.join("backgrounds/nested")).expect("Failed to create dir");
+        std::fs::create_dir_all(dracula.join("waybar")).expect("Failed to create dir");
+        std::fs::create_dir_all(catppuccin.join("rofi")).expect("Failed to create dir");
         let pictures = dir.dir("Pictures/Wallpapers");
 
         let folders = mixture_folders_in(&themes, &dir.path().join("Pictures"));
@@ -210,12 +217,21 @@ mod tests {
     }
 
     #[test]
+    fn mixture_skips_hidden_theme_folders() {
+        let dir = TempDir::new("fs-mixture-hidden");
+        let themes = dir.dir("themes/Dracula");
+        let _backgrounds = dir.dir("themes/Dracula/backgrounds");
+        dir.dir("themes/Dracula/.git");
+
+        let folders = mixture_folders_in(&dir.path().join("themes"), &dir.path().join("Pictures"));
+
+        assert_eq!(folders, vec![themes.join("backgrounds")]);
+    }
+
+    #[test]
     fn mixture_skips_missing_folders() {
         let dir = TempDir::new("fs-mixture-missing");
-        let folders = mixture_folders_in(
-            &dir.path().join("themes"),
-            &dir.path().join("Pictures"),
-        );
+        let folders = mixture_folders_in(&dir.path().join("themes"), &dir.path().join("Pictures"));
         assert!(folders.is_empty(), "{folders:?}");
     }
 
@@ -229,7 +245,10 @@ mod tests {
         )
         .expect("Failed to write user-dirs.dirs");
 
-        assert_eq!(pictures_dir_in(dir.path(), &config), dir.path().join("Bilder"));
+        assert_eq!(
+            pictures_dir_in(dir.path(), &config),
+            dir.path().join("Bilder")
+        );
     }
 
     #[test]

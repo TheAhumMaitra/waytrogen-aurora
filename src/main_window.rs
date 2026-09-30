@@ -554,6 +554,14 @@ pub fn set_mixture_folders(settings: &Settings, folders: &[PathBuf]) -> Vec<Path
     folders
 }
 
+/// Leaves the mixture, so that only the single selected folder is used again.
+pub fn clear_mixture_folders(settings: &Settings) {
+    debug!("Leaving the wallpaper folder mixture");
+    if let Err(e) = settings.set_strv("wallpaper-folders", Vec::<&str>::new()) {
+        error!("Failed to leave the wallpaper folder mixture, {e}");
+    }
+}
+
 fn create_image_grid_scrolled_window(image_grid: &GridView) -> ScrolledWindow {
     ScrolledWindow::builder()
         .child(image_grid)
@@ -753,9 +761,7 @@ fn connect_folder_path_buffer_signals(
             let path = f.text(&f.start_iter(), &f.end_iter(), false).to_string();
             // Picking a folder leaves the mixture, otherwise the chosen folder
             // would be ignored.
-            if let Err(e) = settings.set_strv("wallpaper-folders", Vec::<&str>::new()) {
-                error!("Failed to leave the wallpaper folder mixture, {e}");
-            }
+            clear_mixture_folders(&settings);
             let path = if path.is_empty() {
                 Vec::new()
             } else {

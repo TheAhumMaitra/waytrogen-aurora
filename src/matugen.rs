@@ -228,6 +228,13 @@ mod tests {
     }
 
     #[test]
+    fn a_wallpaper_without_a_path_is_skipped_quietly() {
+        // Saved wallpapers from before the folder was known have no path, and
+        // running matugen on one only produces an error.
+        assert!(!Matugen::new(true).generate(Path::new("")));
+    }
+
+    #[test]
     fn generate_fails_loudly_on_an_unreadable_image() {
         let dir = TempDir::new("matugen-missing");
         let missing = dir.path().join("does-not-exist.png");

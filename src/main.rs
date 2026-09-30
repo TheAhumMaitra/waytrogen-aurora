@@ -11,7 +11,7 @@ use waytrogen::{
     common::APP_ID,
     dotfile::{self, get_config_file},
     fs::mixture_folders,
-    main_window::set_mixture_folders,
+    main_window::{clear_mixture_folders, set_mixture_folders},
 };
 
 fn main() -> glib::ExitCode {
@@ -69,8 +69,11 @@ fn main() -> glib::ExitCode {
     } else {
         match resolve_open_folder(&args) {
             Ok(Some(folder)) => {
-                if let Err(e) = Settings::new(APP_ID)
-                    .set_string("wallpaper-folder", folder.to_string_lossy().as_ref())
+                let settings = Settings::new(APP_ID);
+                // `open` names one folder, so it also leaves the mixture.
+                clear_mixture_folders(&settings);
+                if let Err(e) =
+                    settings.set_string("wallpaper-folder", folder.to_string_lossy().as_ref())
                 {
                     error!("Failed to set wallpaper folder, {e}");
                     return glib::ExitCode::FAILURE;

@@ -1,4 +1,5 @@
 use crate::{
+    main_window::stored_mixture_folders,
     ui_common::DEFAULT_MARGIN,
     wallpaper_changers::{
         MpvPaperPauseModes, MpvPaperSlideshowSettings, WallpaperChanger, WallpaperChangers,
@@ -167,7 +168,11 @@ pub fn generate_mpvpaper_changer_bar(changer_specific_options_box: &Box, setting
                 seconds: interval,
             };
             let varient = WallpaperChangers::MpvPaper(pause_mode, slideshow_settings, options);
-            let path = settings.string("wallpaper-folder").to_string();
+            // mpvpaper only takes one folder, so a mixture starts at its first one.
+            let path = stored_mixture_folders(&settings).first().map_or_else(
+                || settings.string("wallpaper-folder").to_string(),
+                |folder| folder.to_string_lossy().into_owned(),
+            );
             let monitor = settings.string("selected-monitor-item").to_string();
             log::debug!(
                 "{}: {:#?} {} {}",

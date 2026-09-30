@@ -485,4 +485,40 @@ mod tests {
     fn no_folder_is_resolved_without_the_subcommand() {
         assert_eq!(resolve_open_folder(&parse(&["--matugen"])), Ok(None));
     }
+
+    #[test]
+    fn mixture_takes_no_arguments() {
+        for args in [
+            &["mixture"][..],
+            &["--matugen", "mixture"][..],
+            &["mixture", "--matugen"][..],
+        ] {
+            let cli = parse(args);
+            assert!(
+                matches!(cli.command, Some(Command::Mixture)),
+                "{args:?} should be a mixture"
+            );
+        }
+        assert!(Cli::try_parse_from(["waytrogen", "mixture", "/tmp"]).is_err());
+    }
+
+    #[test]
+    fn mixture_works_with_the_wallpaper_cycling_options() {
+        for args in [
+            &["mixture", "--next", "All"][..],
+            &["--next", "All", "mixture"][..],
+            &["mixture", "--random"][..],
+        ] {
+            let cli = parse(args);
+            assert!(
+                matches!(cli.command, Some(Command::Mixture)),
+                "{args:?} should be a mixture"
+            );
+        }
+        assert_eq!(
+            parse(&["mixture", "--next", "All"]).next.as_deref(),
+            Some("All")
+        );
+        assert!(parse(&["mixture", "--random"]).random);
+    }
 }
