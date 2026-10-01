@@ -41,13 +41,13 @@ No option for scaling filter in *awww*. Supports each theme's color pallate
 - Launch with a specific wallpaper folder: `waytrogen open /path/to/the/folder`
   - The folder is canonicalized and stored as the current wallpaper folder
   - Fails without launching the app when the path does not exist or is not a directory
-  - Options work before or after the subcommand, so `waytrogen open ~/Pictures --matugen` is valid
+  - Options work before or after the subcommand, so `waytrogen open ~/Pictures --wallust` is valid
 - Mix every theme folder together: `waytrogen mixture`
   - Uses every subfolder of every theme in `~/.config/themes` plus `Pictures/Wallpapers`
   - `Pictures` is read from `user-dirs.dirs`, so it follows your XDG user directories
   - The window and `--next`/`--random` all cycle the whole mixture as one list
   - Picking a folder in the window leaves the mixture and goes back to that single folder
-  - Options work before or after the subcommand, so `waytrogen mixture --matugen` is valid
+  - Options work before or after the subcommand, so `waytrogen mixture --wallust` is valid
   - The mixture needs the `wallpaper-folders` GSettings key, so recompile the schema after updating: `glib-compile-schemas .`
 - Restore previous wallpapers: `waytrogen --restore` or `waytrogen -r`
 - List current state in JSON: `waytrogen --list` or `waytrogen -l`
@@ -55,9 +55,9 @@ No option for scaling filter in *awww*. Supports each theme's color pallate
   - Script receives: monitor, wallpaper path, complete state
   - Overrides `config.json` `executable_script` property. 
 - Cycle to the next wallpaper: `waytrogen --next` or `waytrogen -n` 
-- Generate a theme from the wallpaper before applying it: `waytrogen --matugen`
-  - Runs `matugen image <wallpaper> --source-color-index 0` with the path of the wallpaper being applied, then applies it
-  - Runs non interactively, so it never asks which source colour to pick
+- Generate a theme from the wallpaper before applying it: `waytrogen --wallust`
+  - Runs `wallust run <wallpaper>` with the path of the wallpaper being applied, then applies it
+  - Runs non interactively on the wallpaper file itself, since wallust only reads a single image and not a folder
   - Can be combined with `open`, `--next`, `--random` and `--restore`
 
 # License

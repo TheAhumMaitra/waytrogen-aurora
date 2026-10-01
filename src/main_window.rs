@@ -1,7 +1,6 @@
 use crate::{
     cli::Cli,
     common::{CacheImageFile, GtkPictureFile, Wallpaper, APP_ID, BUTTON_HEIGHT, BUTTON_WIDTH},
-    matugen::MatugenWorker,
     ui_common::{
         add_escape_key_handler, change_image_button_handlers,
         compare_image_list_items_by_sort_selection_comparitor, generate_changer_bar,
@@ -10,6 +9,7 @@ use crate::{
         DEFAULT_MARGIN, SORT_DROPDOWN_STRINGS,
     },
     wallpaper_changers::{get_available_wallpaper_changers, WallpaperChanger},
+    wallust::WallustWorker,
 };
 use async_channel::{Receiver, Sender};
 use gettextrs::{gettext, ngettext};
@@ -228,9 +228,9 @@ fn setup_image_signal_list_item_factory(
     settings
         .bind("saved-wallpapers", &previous_wallpapers_text_buffer, "text")
         .build();
-    // Runs matugen off the UI thread and drops runs a newer wallpaper replaced.
-    let matugen = if args.matugen {
-        Some(MatugenWorker::spawn())
+    // Runs wallust off the UI thread and drops runs a newer wallpaper replaced.
+    let wallust = if args.wallust {
+        Some(WallustWorker::spawn())
     } else {
         None
     };
@@ -239,7 +239,7 @@ fn setup_image_signal_list_item_factory(
     // SETUP: This runs once per VISIBLE slot (reused for all items)
     factory.connect_setup(clone!(
         #[strong]
-        matugen,
+        wallust,
         #[weak]
         monitors_dropdown,
         #[weak]
@@ -261,10 +261,10 @@ fn setup_image_signal_list_item_factory(
             // By connecting here, we avoid signal accumulation.
             // list_item.item() dynamically points to the data currently in this slot.
             let args = args.clone();
-            let matugen = matugen.clone();
+            let wallust = wallust.clone();
             button.connect_clicked(clone!(
                 #[strong]
-                matugen,
+                wallust,
                 #[weak]
                 list_item,
                 #[weak]
@@ -329,9 +329,9 @@ fn setup_image_signal_list_item_factory(
                         );
                         previous_wallpapers_text_buffer.set_text(&saved_wallpapers);
                         debug!("{}: {}", gettext("Stored Text"), saved_wallpapers);
-                        // Runs in the background, matugen takes seconds.
-                        if let Some(matugen) = matugen.as_ref() {
-                            matugen.submit(Path::new(&path));
+                        // Runs in the background, wallust takes seconds.
+                        if let Some(wallust) = wallust.as_ref() {
+                            wallust.submit(Path::new(&path));
                         }
                         selected_changer
                             .clone()

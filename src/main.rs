@@ -23,11 +23,11 @@ fn main() -> glib::ExitCode {
         .init()
         .unwrap();
 
-    // Detached matugen worker: it only themes what the parent handed over, so it
+    // Detached wallust worker: it only themes what the parent handed over, so it
     // skips the whole startup and never opens a window. It runs after the logger
-    // so matugen failures are still reported.
-    if args.matugen_worker {
-        return if waytrogen::matugen::run_theme_worker() {
+    // so wallust failures are still reported.
+    if args.wallust_worker {
+        return if waytrogen::wallust::run_theme_worker() {
             glib::ExitCode::SUCCESS
         } else {
             glib::ExitCode::FAILURE

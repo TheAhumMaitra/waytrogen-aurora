@@ -4,9 +4,9 @@ use crate::{
         CACHE_FILE_NAME, CONFIG_APP_NAME, GETTEXT_DOMAIN,
     },
     main_window::{build_ui, stored_mixture_folders},
-    matugen::{theme_latest_in_background, Matugen},
     ui_common::{gschema_string_to_string, string_to_gschema_string, SORT_DROPDOWN_STRINGS},
     wallpaper_changers::{WallpaperChanger, WallpaperChangers},
+    wallust::{theme_latest_in_background, Wallust},
 };
 use clap::{Parser, Subcommand};
 use gettextrs::{bind_textdomain_codeset, bindtextdomain, getters, gettext, textdomain};
@@ -32,11 +32,11 @@ pub fn restore_wallpapers(args: &Cli) -> glib::ExitCode {
         settings.string("saved-wallpapers").as_ref(),
     ))
     .unwrap();
-    let matugen = Matugen::new(args.matugen);
+    let wallust = Wallust::new(args.wallust);
     let mut themed: Vec<PathBuf> = Vec::new();
     for wallpaper in previous_wallpapers {
         debug!("Restoring: {:?}", wallpaper);
-        if matugen.take_image(Path::new(&wallpaper.clone().path)) {
+        if wallust.take_image(Path::new(&wallpaper.clone().path)) {
             themed.push(PathBuf::from(wallpaper.clone().path));
         }
         wallpaper.clone().changer.change(
@@ -120,13 +120,13 @@ pub fn set_random_wallpapers(args: &Cli) -> glib::ExitCode {
     let mut previous_wallpapers = get_previous_wallpapers(&settings);
     let files = get_previous_supported_wallpapers(&settings);
     WallpaperChangers::killall_changers();
-    let matugen = Matugen::new(args.matugen);
+    let wallust = Wallust::new(args.wallust);
     let mut themed: Vec<PathBuf> = Vec::new();
     for w in &mut previous_wallpapers {
         let mut rng = rand::thread_rng();
         let index = rng.gen_range(0..files.len());
         log::debug!("{index}");
-        if matugen.take_image(&files[index]) {
+        if wallust.take_image(&files[index]) {
             themed.push(files[index].clone());
         }
         w.changer
@@ -161,7 +161,7 @@ pub fn cycle_next_wallpaper(args: &Cli) -> glib::ExitCode {
     let mut files = get_previous_supported_wallpapers(&settings);
     let invert_sort_state = settings.boolean("invert-sort");
     sort_by_sort_dropdown_string(&mut files, sort_dropdown_string, invert_sort_state);
-    let matugen = Matugen::new(args.matugen);
+    let wallust = Wallust::new(args.wallust);
     let mut themed: Vec<PathBuf> = Vec::new();
     if args.next.clone().unwrap_or_default() == "All" {
         for previous_wallpaper in &mut previous_wallpapers {
@@ -176,7 +176,7 @@ pub fn cycle_next_wallpaper(args: &Cli) -> glib::ExitCode {
                 &files,
                 wallpaper_index,
                 previous_wallpaper,
-                &matugen,
+                &wallust,
                 &mut themed,
             );
         }
@@ -201,7 +201,7 @@ pub fn cycle_next_wallpaper(args: &Cli) -> glib::ExitCode {
                     .unwrap_or_default()
             }),
             &mut previous_wallpaper,
-            &matugen,
+            &wallust,
             &mut themed,
         );
         let index = previous_wallpapers
@@ -227,12 +227,12 @@ fn try_set_next_wallpaper(
     files: &[PathBuf],
     position: Option<usize>,
     previous_wallpaper: &mut Wallpaper,
-    matugen: &Matugen,
+    wallust: &Wallust,
     themed: &mut Vec<PathBuf>,
 ) {
     if let Some(i) = position {
         let path = &files[(i + 1) % files.len()];
-        if matugen.take_image(path) {
+        if wallust.take_image(path) {
             themed.push(path.clone());
         }
         previous_wallpaper
@@ -251,7 +251,7 @@ fn try_set_next_wallpaper(
         );
         match files.first() {
             Some(p) => {
-                if matugen.take_image(p) {
+                if wallust.take_image(p) {
                     themed.push(p.clone());
                 }
                 previous_wallpaper
@@ -417,12 +417,12 @@ pub struct Cli {
     /// Hide bottom bar
     pub hide_bottom_bar: Option<bool>,
     #[arg(long, global = true)]
-    /// Run `matugen image <wallpaper>` before applying the wallpaper(s). Launches the app when used on its own.
-    pub matugen: bool,
+    /// Run `wallust run <wallpaper>` before applying the wallpaper(s). Launches the app when used on its own.
+    pub wallust: bool,
     /// Internal: themes the images read from stdin, one path per line. Started by
-    /// waytrogen itself so it can exit before matugen finishes.
+    /// waytrogen itself so it can exit before wallust finishes.
     #[arg(long, hide = true)]
-    pub matugen_worker: bool,
+    pub wallust_worker: bool,
 }
 
 #[cfg(test)]
@@ -450,13 +450,13 @@ mod tests {
     }
 
     #[test]
-    fn open_and_matugen_work_together() {
+    fn open_and_wallust_work_together() {
         for args in [
-            ["open", "/tmp/wallpapers", "--matugen"],
-            ["--matugen", "open", "/tmp/wallpapers"],
+            ["open", "/tmp/wallpapers", "--wallust"],
+            ["--wallust", "open", "/tmp/wallpapers"],
         ] {
             let cli = parse(&args);
-            assert!(cli.matugen, "{args:?} should enable matugen");
+            assert!(cli.wallust, "{args:?} should enable wallust");
             assert!(
                 matches!(cli.command, Some(Command::Open { .. })),
                 "{args:?} should open a folder"
@@ -471,8 +471,8 @@ mod tests {
         assert!(parse(&["-r"]).restore);
         assert_eq!(parse(&["--next", "All"]).next.as_deref(), Some("All"));
         assert!(parse(&["--version"]).version);
-        assert!(parse(&["--matugen"]).matugen);
-        assert!(!parse(&[]).matugen);
+        assert!(parse(&["--wallust"]).wallust);
+        assert!(!parse(&[]).wallust);
         assert!(parse(&["open", "/tmp/wallpapers"]).command.is_some());
     }
 
@@ -509,15 +509,15 @@ mod tests {
 
     #[test]
     fn no_folder_is_resolved_without_the_subcommand() {
-        assert_eq!(resolve_open_folder(&parse(&["--matugen"])), Ok(None));
+        assert_eq!(resolve_open_folder(&parse(&["--wallust"])), Ok(None));
     }
 
     #[test]
     fn mixture_takes_no_arguments() {
         for args in [
             &["mixture"][..],
-            &["--matugen", "mixture"][..],
-            &["mixture", "--matugen"][..],
+            &["--wallust", "mixture"][..],
+            &["mixture", "--wallust"][..],
         ] {
             let cli = parse(args);
             assert!(

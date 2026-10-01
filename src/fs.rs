@@ -38,7 +38,7 @@ pub fn get_image_files(
     files
 }
 
-/// The themes folder matugen themes live in, `~/.config/themes`.
+/// The themes folder wallust themes live in, `~/.config/themes`.
 #[must_use]
 pub fn themes_dir() -> PathBuf {
     config_dir().join("themes")
